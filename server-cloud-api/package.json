@@ -1,0 +1,16 @@
+{
+  "name": "whatsapp-cloud-api-bridge",
+  "version": "1.0.0",
+  "description": "גשר וואטסאפ-מייל מבוסס WhatsApp Cloud API הרשמי של מטא",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5"
+  }
+}

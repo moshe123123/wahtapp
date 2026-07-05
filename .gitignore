@@ -1,0 +1,12 @@
+# תלויות
+node_modules/
+
+# קבצי סביבה עם סודות אמיתיים - לעולם לא להעלות!
+.env
+
+# סשן וואטסאפ (רלוונטי רק לגרסת server/ עם Baileys)
+server/auth_session/
+
+# קבצי מערכת
+.DS_Store
+*.log
