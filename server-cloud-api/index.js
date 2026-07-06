@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
 
@@ -21,18 +21,14 @@ function requireApiKey(req, res, next) {
   next();
 }
 
-// לוג בסיסי לכל בקשה שמגיעה לשרת (עוזר לראות אם בכלל משהו מגיע, למשל מה-webhook)
 app.use((req, res, next) => {
   logger.info(`בקשה נכנסת: ${req.method} ${req.path}`);
   next();
 });
 
-// ---------- אזור אישי: רישום מספר בשני שלבים ----------
-
-// שלב 1: לחיצה על "שלח לי קוד" באתר
 app.post('/register/request-code', requireApiKey, async (req, res) => {
   try {
-    const { method } = req.body; // 'SMS' או 'VOICE'
+    const { method } = req.body;
     const data = await requestVerificationCode({ codeMethod: method || 'SMS' });
     res.json({ ok: true, data });
   } catch (err) {
@@ -42,7 +38,6 @@ app.post('/register/request-code', requireApiKey, async (req, res) => {
   }
 });
 
-// שלב 2: הזנת הקוד שהתקבל בשיחה/SMS
 app.post('/register/verify-code', requireApiKey, async (req, res) => {
   try {
     const { code } = req.body;
@@ -56,9 +51,18 @@ app.post('/register/verify-code', requireApiKey, async (req, res) => {
   }
 });
 
-// ---------- Webhook של מטא: קבלת הודעות נכנסות ----------
+app.post('/register/activate-number', requireApiKey, async (req, res) => {
+  try {
+    const { pin } = req.body;
+    const data = await registerPhoneNumber({ pin: pin || '123456' });
+    res.json({ ok: true, data });
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('route /register/activate-number נכשל', details);
+    res.status(500).json({ error: details });
+  }
+});
 
-// אימות ה-Webhook (חד פעמי, כשמגדירים אותו בדשבורד של מטא)
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -72,7 +76,6 @@ app.get('/webhook', (req, res) => {
   res.sendStatus(403);
 });
 
-// קבלת הודעות אמיתיות מוואטסאפ
 app.post('/webhook', async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
@@ -92,7 +95,6 @@ app.post('/webhook', async (req, res) => {
         await forwardWhatsAppMessageToEmail({ fromNumber, fromName, text });
       }
     } else if (statuses && statuses.length) {
-      // עדכוני סטטוס (נשלח/נמסר/נקרא) - שימושי לדיבוג בעיות שליחה
       for (const s of statuses) {
         logger.info('עדכון סטטוס הודעה יוצאת', { id: s.id, status: s.status, recipient: s.recipient_id });
       }
@@ -100,14 +102,13 @@ app.post('/webhook', async (req, res) => {
       logger.warn('התקבלה קריאת webhook ללא הודעות/סטטוסים מזוהים', req.body);
     }
 
-    res.sendStatus(200); // תמיד להחזיר 200 כדי שמטא לא תנסה לשלוח שוב
+    res.sendStatus(200);
   } catch (err) {
     logger.error('שגיאה בטיפול ב-webhook', err.message);
     res.sendStatus(200);
   }
 });
 
-// ---------- שליחת הודעה יוצאת (מהתוסף בג'ימייל) ----------
 app.post('/send', requireApiKey, async (req, res) => {
   const { toNumber, text } = req.body;
   if (!toNumber || !text) {
@@ -123,7 +124,6 @@ app.post('/send', requireApiKey, async (req, res) => {
   }
 });
 
-// ---------- לוגים: לצפייה מהאזור האישי ----------
 app.get('/logs', requireApiKey, (req, res) => {
   res.json({ logs: logger.getAll() });
 });
@@ -135,7 +135,6 @@ app.post('/logs/clear', requireApiKey, (req, res) => {
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-// תפיסת שגיאות גלובליות שלא נתפסו בקוד - כדי שגם הן יופיעו בלוג ולא "ייעלמו" בשקט
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled Rejection', reason?.message || reason);
 });

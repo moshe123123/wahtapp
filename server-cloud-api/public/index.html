@@ -23,6 +23,19 @@
     </label>
   </section>
 
+  <section style="border-color:#25D366;">
+    <h3>⚡ שלב חשוב: הפעלת המספר מול Cloud API</h3>
+    <p style="font-size:13px;color:#666;">
+      אם קיבלת שגיאה "Account not registered" בשליחת הודעה - זה השלב שפותר את זה.
+      צריך לבצע פעם אחת בלבד (גם למספר הבדיקה של מטא).
+    </p>
+    <label>קוד PIN (6 ספרות - תבחר כל מספר, ותזכור אותו)
+      <input id="pin" value="123456" />
+    </label>
+    <button onclick="activateNumber()">הפעל את המספר</button>
+    <div class="result" id="activateResult"></div>
+  </section>
+
   <section>
     <h3>שלב 2: קבלת קוד אימות</h3>
     <label>שיטת שליחה
@@ -81,6 +94,12 @@ async function post(path, body) {
     body: JSON.stringify(body || {}),
   });
   return res.json();
+}
+
+async function activateNumber() {
+  const pin = document.getElementById('pin').value.trim();
+  const data = await post('/register/activate-number', { pin });
+  document.getElementById('activateResult').textContent = JSON.stringify(data, null, 2);
 }
 
 async function requestCode() {

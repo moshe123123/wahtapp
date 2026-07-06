@@ -13,6 +13,24 @@ function graphClient() {
   });
 }
 
+/** רישום המספר בפועל מול Cloud API (שלב טכני נדרש, נפרד מ-request_code/verify_code) */
+export async function registerPhoneNumber({ pin = '123456' } = {}) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const client = graphClient();
+  logger.info('רושם את המספר מול Cloud API', { phoneNumberId });
+  try {
+    const { data } = await client.post(`/${phoneNumberId}/register`, {
+      messaging_product: 'whatsapp',
+      pin,
+    });
+    logger.info('המספר נרשם בהצלחה מול Cloud API', data);
+    return data;
+  } catch (err) {
+    logger.error('רישום המספר מול Cloud API נכשל', err.response?.data || err.message);
+    throw err;
+  }
+}
+
 /**
  * שלב 1 של רישום מספר: מבקש ממטא לשלוח קוד אימות (SMS או שיחה קולית)
  * למספר הטלפון המקושר ל-Phone Number ID הנתון.
