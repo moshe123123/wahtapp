@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8" />
+<title>אזור אישי - גשר וואטסאפ</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 16px; }
+  h2 { color: #075E54; }
+  section { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  label { display:block; margin-top:8px; font-size: 14px; }
+  input, select { width: 100%; box-sizing: border-box; padding: 8px; margin-top: 4px; }
+  button { margin-top: 12px; padding: 8px 14px; background:#25D366; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+  .result { margin-top: 10px; font-size: 13px; white-space: pre-wrap; direction: ltr; text-align: left; background:#f7f7f7; padding:8px; border-radius:6px; }
+</style>
+</head>
+<body>
+  <h2>אזור אישי - גשר וואטסאפ ↔ מייל</h2>
+
+  <section>
+    <h3>שלב 1: מפתח API</h3>
+    <label>מפתח ה-API של השרת שלך
+      <input id="apiKey" placeholder="מהערך API_KEY בהגדרות השרת" />
+    </label>
+  </section>
+
+  <section style="border-color:#25D366;">
+    <h3>⚡ שלב חשוב: הפעלת המספר מול Cloud API</h3>
+    <p style="font-size:13px;color:#666;">
+      אם קיבלת שגיאה "Account not registered" בשליחת הודעה - זה השלב שפותר את זה.
+      צריך לבצע פעם אחת בלבד (גם למספר הבדיקה של מטא).
+    </p>
+    <label>קוד PIN (6 ספרות - תבחר כל מספר, ותזכור אותו)
+      <input id="pin" value="123456" />
+    </label>
+    <button onclick="activateNumber()">הפעל את המספר</button>
+    <div class="result" id="activateResult"></div>
+  </section>
+
+  <section>
+    <h3>שלב 2: קבלת קוד אימות</h3>
+    <label>שיטת שליחה
+      <select id="method">
+        <option value="SMS">SMS</option>
+        <option value="VOICE">שיחה קולית</option>
+      </select>
+    </label>
+    <button onclick="requestCode()">שלח לי קוד</button>
+    <div class="result" id="requestResult"></div>
+  </section>
+
+  <section>
+    <h3>שלב 3: אימות הקוד</h3>
+    <label>הקוד שהתקבל
+      <input id="code" placeholder="123456" />
+    </label>
+    <button onclick="verify()">אמת קוד</button>
+    <div class="result" id="verifyResult"></div>
+  </section>
+
+  <section>
+    <h3>📋 לוגים - איפה יש בעיות?</h3>
+    <p style="font-size:13px;color:#666;">
+      כל פעולה בשרת (בקשת קוד, אימות, שליחה, קבלת הודעה, כשל בכל שלב) נרשמת כאן.
+      שגיאות מסומנות באדום.
+    </p>
+    <button onclick="loadLogs()">🔄 רענן לוגים</button>
+    <button onclick="clearLogs()" style="background:#d9534f;">🗑️ נקה לוגים</button>
+    <label style="margin-top:8px;">
+      <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()" />
+      רענון אוטומטי כל 5 שניות
+    </label>
+    <div id="logsBox" style="margin-top:10px; max-height:320px; overflow-y:auto; font-family:monospace; font-size:12px; direction:ltr; text-align:left;"></div>
+  </section>
+
+  <section>
+    <h3>בדיקה: שליחת הודעה</h3>
+    <label>מספר יעד (בפורמט בינלאומי, בלי +)
+      <input id="toNumber" placeholder="972501234567" />
+    </label>
+    <label>טקסט
+      <input id="text" placeholder="הודעת בדיקה" />
+    </label>
+    <button onclick="sendMsg()">שלח</button>
+    <div class="result" id="sendResult"></div>
+  </section>
+
+<script>
+function apiKey() { return document.getElementById('apiKey').value.trim(); }
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey() },
+    body: JSON.stringify(body || {}),
+  });
+  return res.json();
+}
+
+async function activateNumber() {
+  const pin = document.getElementById('pin').value.trim();
+  const data = await post('/register/activate-number', { pin });
+  document.getElementById('activateResult').textContent = JSON.stringify(data, null, 2);
+}
+
+async function requestCode() {
+  const method = document.getElementById('method').value;
+  const data = await post('/register/request-code', { method });
+  document.getElementById('requestResult').textContent = JSON.stringify(data, null, 2);
+}
+
+async function verify() {
+  const code = document.getElementById('code').value.trim();
+  const data = await post('/register/verify-code', { code });
+  document.getElementById('verifyResult').textContent = JSON.stringify(data, null, 2);
+}
+
+let autoRefreshTimer = null;
+
+async function loadLogs() {
+  const res = await fetch('/logs', { headers: { 'x-api-key': apiKey() } });
+  const data = await res.json();
+  const box = document.getElementById('logsBox');
+  if (!data.logs || !data.logs.length) {
+    box.innerHTML = '<div style="color:#888">אין לוגים עדיין.</div>';
+    return;
+  }
+  box.innerHTML = data.logs.map((l) => {
+    const color = l.level === 'error' ? '#c0392b' : l.level === 'warn' ? '#e67e22' : '#333';
+    const meta = l.meta ? '<br>&nbsp;&nbsp;' + JSON.stringify(l.meta) : '';
+    return `<div style="color:${color};margin-bottom:4px;">[${l.time}] [${l.level.toUpperCase()}] ${l.message}${meta}</div>`;
+  }).join('');
+}
+
+async function clearLogs() {
+  await fetch('/logs/clear', { method: 'POST', headers: { 'x-api-key': apiKey() } });
+  loadLogs();
+}
+
+function toggleAutoRefresh() {
+  const checked = document.getElementById('autoRefresh').checked;
+  if (checked) {
+    autoRefreshTimer = setInterval(loadLogs, 5000);
+  } else if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+  }
+}
+
+async function sendMsg() {
+  const toNumber = document.getElementById('toNumber').value.trim();
+  const text = document.getElementById('text').value.trim();
+  const data = await post('/send', { toNumber, text });
+  document.getElementById('sendResult').textContent = JSON.stringify(data, null, 2);
+}
+</script>
+</body>
+</html>
