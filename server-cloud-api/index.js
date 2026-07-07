@@ -6,11 +6,20 @@ import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNum
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
 
+const conversations = new Map();
+
+function addMessageToConversation(number, direction, text) {
+  if (!conversations.has(number)) conversations.set(number, []);
+  const list = conversations.get(number);
+  list.push({ direction, text, time: new Date().toISOString() });
+  if (list.length > 200) list.shift();
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public'))); // האזור האישי (index.html)
+app.use(express.static(path.join(__dirname, 'public')));
 
 function requireApiKey(req, res, next) {
   const key = req.header('x-api-key');
@@ -92,6 +101,7 @@ app.post('/webhook', async (req, res) => {
         const text = msg.text?.body || '';
 
         logger.info('התקבלה הודעת וואטסאפ נכנסת', { fromNumber, fromName, text });
+        addMessageToConversation(fromNumber, 'in', text);
         await forwardWhatsAppMessageToEmail({ fromNumber, fromName, text });
       }
     } else if (statuses && statuses.length) {
@@ -116,12 +126,27 @@ app.post('/send', requireApiKey, async (req, res) => {
   }
   try {
     const data = await sendWhatsAppText({ toNumber, text });
+    addMessageToConversation(toNumber, 'out', text);
     res.json({ ok: true, data });
   } catch (err) {
     const details = err.response?.data || err.message;
     logger.error('route /send נכשל', details);
     res.status(500).json({ error: details });
   }
+});
+
+app.get('/conversations', requireApiKey, (req, res) => {
+  const list = [...conversations.keys()].map((number) => {
+    const msgs = conversations.get(number);
+    const last = msgs[msgs.length - 1];
+    return { number, lastMessage: last?.text, lastTime: last?.time };
+  });
+  res.json({ conversations: list });
+});
+
+app.get('/conversations/:number', requireApiKey, (req, res) => {
+  const messages = conversations.get(req.params.number) || [];
+  res.json({ messages });
 });
 
 app.get('/logs', requireApiKey, (req, res) => {

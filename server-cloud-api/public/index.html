@@ -72,6 +72,25 @@
     <div id="logsBox" style="margin-top:10px; max-height:320px; overflow-y:auto; font-family:monospace; font-size:12px; direction:ltr; text-align:left;"></div>
   </section>
 
+  <section style="border-color:#075E54;">
+    <h3>💬 התכתבות</h3>
+    <p style="font-size:13px;color:#666;">
+      רשימת השיחות והודעות (נשמר בזיכרון השרת בלבד - מתאפס בכל דיפלוי מחדש).
+    </p>
+    <button onclick="loadConversations()">🔄 רענן שיחות</button>
+    <select id="convSelect" onchange="loadConversation()" style="margin-top:8px;">
+      <option value="">בחר שיחה...</option>
+    </select>
+    <div id="chatBox" style="margin-top:10px; max-height:300px; overflow-y:auto; border:1px solid #eee; border-radius:6px; padding:8px;"></div>
+    <label style="margin-top:8px;">מספר יעד (אם עדיין אין שיחה קיימת)
+      <input id="chatNumber" placeholder="972501234567" />
+    </label>
+    <label>הודעה
+      <input id="chatText" placeholder="כתוב הודעה..." />
+    </label>
+    <button onclick="sendChat()">שלח</button>
+  </section>
+
   <section>
     <h3>בדיקה: שליחת הודעה</h3>
     <label>מספר יעד (בפורמט בינלאומי, בלי +)
@@ -94,6 +113,46 @@ async function post(path, body) {
     body: JSON.stringify(body || {}),
   });
   return res.json();
+}
+
+let currentChatNumber = null;
+
+async function loadConversations() {
+  const res = await fetch('/conversations', { headers: { 'x-api-key': apiKey() } });
+  const data = await res.json();
+  const select = document.getElementById('convSelect');
+  select.innerHTML = '<option value="">בחר שיחה...</option>' + data.conversations
+    .map((c) => `<option value="${c.number}">${c.number} - ${(c.lastMessage || '').slice(0, 20)}</option>`)
+    .join('');
+}
+
+async function loadConversation() {
+  const number = document.getElementById('convSelect').value;
+  if (!number) return;
+  currentChatNumber = number;
+  document.getElementById('chatNumber').value = number;
+  const res = await fetch(`/conversations/${number}`, { headers: { 'x-api-key': apiKey() } });
+  const data = await res.json();
+  const box = document.getElementById('chatBox');
+  box.innerHTML = data.messages.map((m) => {
+    const align = m.direction === 'out' ? 'left' : 'right';
+    const bg = m.direction === 'out' ? '#DCF8C6' : '#ECECEC';
+    return `<div style="text-align:${align};margin-bottom:6px;">
+      <span style="background:${bg};padding:6px 10px;border-radius:8px;display:inline-block;max-width:80%;">${m.text}</span>
+    </div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChat() {
+  const toNumber = document.getElementById('chatNumber').value.trim();
+  const text = document.getElementById('chatText').value.trim();
+  if (!toNumber || !text) return;
+  await post('/send', { toNumber, text });
+  document.getElementById('chatText').value = '';
+  await loadConversations();
+  document.getElementById('convSelect').value = toNumber;
+  await loadConversation();
 }
 
 async function activateNumber() {
