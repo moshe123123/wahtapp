@@ -1,10 +1,13 @@
 import nodemailer from 'nodemailer';
 import { logger } from './logger.js';
 
+const smtpPort = Number(process.env.SMTP_PORT || 587);
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 465),
-  secure: true,
+  port: smtpPort,
+  secure: smtpPort === 465, // 465 = SSL ישיר, 587 = STARTTLS (מומלץ יותר בסביבות ענן כמו Render)
+  connectionTimeout: 15000, // עד 15 שניות לניסיון חיבור, במקום להיתקע בלי סוף
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,

@@ -104,7 +104,19 @@
   </section>
 
 <script>
-function apiKey() { return document.getElementById('apiKey').value.trim(); }
+function apiKey() {
+  const val = document.getElementById('apiKey').value.trim();
+  if (val) localStorage.setItem('wa_bridge_api_key', val);
+  return val;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('wa_bridge_api_key');
+  if (saved) {
+    document.getElementById('apiKey').value = saved;
+    loadConversations();
+  }
+});
 
 async function post(path, body) {
   const res = await fetch(path, {
