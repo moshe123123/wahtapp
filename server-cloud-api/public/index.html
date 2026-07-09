@@ -78,6 +78,10 @@
       רשימת השיחות והודעות (נשמר בזיכרון השרת בלבד - מתאפס בכל דיפלוי מחדש).
     </p>
     <button onclick="loadConversations()">🔄 רענן שיחות</button>
+    <label style="margin-top:8px;">
+      <input type="checkbox" id="chatAutoRefresh" onchange="toggleChatAutoRefresh()" />
+      רענון אוטומטי כל 5 שניות
+    </label>
     <select id="convSelect" onchange="loadConversation()" style="margin-top:8px;">
       <option value="">בחר שיחה...</option>
     </select>
@@ -165,6 +169,20 @@ async function sendChat() {
   await loadConversations();
   document.getElementById('convSelect').value = toNumber;
   await loadConversation();
+}
+
+let chatAutoRefreshTimer = null;
+
+function toggleChatAutoRefresh() {
+  const checked = document.getElementById('chatAutoRefresh').checked;
+  if (checked) {
+    chatAutoRefreshTimer = setInterval(async () => {
+      await loadConversations();
+      if (currentChatNumber) await loadConversation();
+    }, 5000);
+  } else if (chatAutoRefreshTimer) {
+    clearInterval(chatAutoRefreshTimer);
+  }
 }
 
 async function activateNumber() {
