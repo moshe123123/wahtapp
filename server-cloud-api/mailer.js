@@ -7,9 +7,9 @@ import { logger } from './logger.js';
  * כדי למנוע ניצול לרעה לספאם. HTTPS כמעט אף פעם לא חסום.
  */
 export async function forwardWhatsAppMessageToEmail({ fromNumber, fromName, text }) {
-  const destBase = process.env.DESTINATION_EMAIL;
-  const [localPart, domain] = destBase.split('@');
-  const taggedTo = `${localPart}+wa_${fromNumber}@${domain}`;
+  const destinationEmail = process.env.DESTINATION_EMAIL; // שליחה ישירה, בלי plus-addressing -
+  // ב-Resend (מצב בדיקה בלי דומיין מאומת) אפשר לשלוח רק בדיוק לכתובת שנרשמה,
+  // וכל תוספת (כמו +wa_123) נחשבת "כתובת אחרת" ונדחית.
 
   const subject = `[WA] ${fromName || fromNumber}`;
 
@@ -19,15 +19,15 @@ export async function forwardWhatsAppMessageToEmail({ fromNumber, fromName, text
     text || '(הודעה ללא טקסט)',
     '',
     '---',
-    `wa-thread-id:${fromNumber}`,
+    `wa-thread-id:${fromNumber}`, // הסימון הזה עדיין מזהה את השיחה עבור תוסף הכרום
   ].join('\n');
 
   try {
     await axios.post(
       'https://api.resend.com/emails',
       {
-        from: 'onboarding@resend.dev', // כתובת בדיקה מובנית של Resend, לא דורשת אימות דומיין
-        to: [taggedTo],
+        from: 'onboarding@resend.dev',
+        to: [destinationEmail],
         subject,
         text: body,
       },
@@ -38,10 +38,10 @@ export async function forwardWhatsAppMessageToEmail({ fromNumber, fromName, text
         },
       }
     );
-    logger.info('מייל נשלח בהצלחה (Resend)', { to: taggedTo, subject });
+    logger.info('מייל נשלח בהצלחה (Resend)', { to: destinationEmail, subject });
   } catch (err) {
     logger.error('שליחת מייל נכשלה (Resend)', {
-      to: taggedTo,
+      to: destinationEmail,
       error: err.response?.data || err.message,
     });
     throw err;
