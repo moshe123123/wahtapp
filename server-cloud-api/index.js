@@ -12,30 +12,46 @@ import axios from 'axios';
 async function forwardToAppsScript(fromNumber, fromName, text) {
   const url = process.env.APPS_SCRIPT_URL;
   if (!url) return; // אופציונלי - אם לא הוגדר, פשוט מדלגים
-  try {
-    await axios.post(
-      url,
+  const payload = {
+    object: 'whatsapp_business_account', // מדמה בדיוק את מבנה ה-webhook האמיתי של מטא
+    entry: [
       {
-        object: 'whatsapp_business_account', // מדמה בדיוק את מבנה ה-webhook האמיתי של מטא
-        entry: [
+        changes: [
           {
-            changes: [
-              {
-                value: {
-                  messages: [{ from: fromNumber, text: { body: text } }],
-                  contacts: [{ wa_id: fromNumber, profile: { name: fromName || fromNumber } }],
-                },
-              },
-            ],
+            value: {
+              messages: [{ from: fromNumber, text: { body: text } }],
+              contacts: [{ wa_id: fromNumber, profile: { name: fromName || fromNumber } }],
+            },
           },
         ],
       },
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    ],
+  };
+  try {
+    await postFollowingRedirect(url, payload);
     logger.info('הודעה הועברה בהצלחה ל-Apps Script');
   } catch (err) {
     logger.error('העברה ל-Apps Script נכשלה', err.message);
   }
+}
+
+// עוקב ידנית אחרי redirect תוך שימור ה-method וה-body (Apps Script תמיד מפנה עם 302,
+// וספריות רבות הופכות POST ל-GET אוטומטית ב-redirect - כאן מונעים את זה בכוונה)
+async function postFollowingRedirect(url, payload, maxHops = 5) {
+  let currentUrl = url;
+  for (let i = 0; i < maxHops; i++) {
+    const res = await axios.post(currentUrl, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      maxRedirects: 0,
+      validateStatus: (s) => (s >= 200 && s < 300) || (s >= 300 && s < 400),
+    });
+    if (res.status >= 300 && res.status < 400 && res.headers.location) {
+      currentUrl = res.headers.location;
+      continue;
+    }
+    return res;
+  }
+  throw new Error('too many redirects');
 }
 
 // מאגר שיחות פשוט בזיכרון - key = מספר טלפון, value = מערך הודעות {direction, text, time}
