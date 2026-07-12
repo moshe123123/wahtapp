@@ -5,6 +5,38 @@ import { fileURLToPath } from 'url';
 import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
+import axios from 'axios';
+
+// כתובת ה-Apps Script (Web App) שמנהלת את הגיליון + Gmail native - קריאת שרת-לשרת,
+// לא נחסמת בנטפרי כי הדפדפן של המשתמש לא מעורב בקריאה הזו בכלל
+async function forwardToAppsScript(fromNumber, fromName, text) {
+  const url = process.env.APPS_SCRIPT_URL;
+  if (!url) return; // אופציונלי - אם לא הוגדר, פשוט מדלגים
+  try {
+    await axios.post(
+      url,
+      {
+        object: 'whatsapp_business_account', // מדמה בדיוק את מבנה ה-webhook האמיתי של מטא
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ from: fromNumber, text: { body: text } }],
+                  contacts: [{ wa_id: fromNumber, profile: { name: fromName || fromNumber } }],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    logger.info('הודעה הועברה בהצלחה ל-Apps Script');
+  } catch (err) {
+    logger.error('העברה ל-Apps Script נכשלה', err.message);
+  }
+}
 
 // מאגר שיחות פשוט בזיכרון - key = מספר טלפון, value = מערך הודעות {direction, text, time}
 // זה מה שמאפשר ממשק התכתבות באזור האישי, בלי קשר לתוסף הכרום/Gmail
@@ -126,6 +158,7 @@ app.post('/webhook', async (req, res) => {
         logger.info('התקבלה הודעת וואטסאפ נכנסת', { fromNumber, fromName, text });
         addMessageToConversation(fromNumber, 'in', text);
         await forwardWhatsAppMessageToEmail({ fromNumber, fromName, text });
+        await forwardToAppsScript(fromNumber, fromName, text);
       }
     } else if (statuses && statuses.length) {
       // עדכוני סטטוס (נשלח/נמסר/נקרא) - שימושי לדיבוג בעיות שליחה
