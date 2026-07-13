@@ -180,6 +180,9 @@ app.post('/webhook', async (req, res) => {
       // עדכוני סטטוס (נשלח/נמסר/נקרא) - שימושי לדיבוג בעיות שליחה
       for (const s of statuses) {
         logger.info('עדכון סטטוס הודעה יוצאת', { id: s.id, status: s.status, recipient: s.recipient_id });
+        if (s.errors) {
+          logger.error('פרטי שגיאת שליחה', JSON.stringify(s.errors));
+        }
       }
     } else {
       logger.warn('התקבלה קריאת webhook ללא הודעות/סטטוסים מזוהים', req.body);
