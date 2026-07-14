@@ -10,6 +10,10 @@
   },
   "author": "moshe123123",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moshe123123/wahtapp.git"
+  },
   "devDependencies": {
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
@@ -17,6 +21,13 @@
   "build": {
     "appId": "com.moshe123123.wathapp",
     "productName": "WA Bridge",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "moshe123123",
+        "repo": "wahtapp"
+      }
+    ],
     "win": {
       "target": "nsis"
     },
