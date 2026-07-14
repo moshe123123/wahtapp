@@ -1,0 +1,33 @@
+{
+  "name": "wathapp-desktop",
+  "productName": "WA Bridge",
+  "version": "1.0.0",
+  "description": "אפליקציית שולחן עבודה לגשר וואטסאפ-מייל",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "author": "moshe123123",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.moshe123123.wathapp",
+    "productName": "WA Bridge",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*"
+    ]
+  }
+}
