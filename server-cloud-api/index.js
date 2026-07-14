@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64 } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
 import axios from 'axios';
@@ -58,14 +58,19 @@ async function postFollowingRedirect(url, payload, maxHops = 5) {
 // זה מה שמאפשר ממשק התכתבות באזור האישי, בלי קשר לתוסף הכרום/Gmail
 const conversations = new Map();
 
-function addMessageToConversation(number, direction, text, id) {
+function addMessageToConversation(number, direction, text, id, extra = {}) {
   if (!conversations.has(number)) conversations.set(number, []);
   const list = conversations.get(number);
   // direction: 'in' | 'out'. status רלוונטי רק ל-'out': sent -> delivered -> read (או failed)
+  // type: 'text' (ברירת מחדל) | 'image' | 'audio' | 'video' | 'document'
+  // עבור מדיה: mediaId הוא מזהה המדיה אצל מטא (לא הבינארי עצמו - זה נשלף לפי דרישה דרך /media/:id)
   list.push({
     id: id || null,
     direction,
     text,
+    type: extra.type || 'text',
+    mediaId: extra.mediaId || null,
+    mimeType: extra.mimeType || null,
     time: new Date().toISOString(),
     status: direction === 'out' ? 'sent' : undefined,
   });
@@ -191,8 +196,25 @@ app.post('/webhook', async (req, res) => {
         const fromNumber = msg.from;
         const contact = value.contacts?.find((c) => c.wa_id === fromNumber);
         const fromName = contact?.profile?.name;
-        const text = msg.text?.body || '';
 
+        // הודעות טקסט לעומת מדיה (תמונה/הודעה קולית/וידאו/מסמך) - מבנה שונה ב-webhook לכל סוג
+        const mediaTypes = ['image', 'audio', 'video', 'document'];
+        if (mediaTypes.includes(msg.type)) {
+          const mediaObj = msg[msg.type]; // msg.image / msg.audio / msg.video / msg.document
+          const caption = mediaObj?.caption || '';
+          logger.info('התקבלה הודעת מדיה נכנסת', { fromNumber, type: msg.type, mediaId: mediaObj?.id });
+          addMessageToConversation(fromNumber, 'in', caption, msg.id, {
+            type: msg.type,
+            mediaId: mediaObj?.id,
+            mimeType: mediaObj?.mime_type,
+          });
+          const label = { image: 'תמונה', audio: 'הודעה קולית', video: 'סרטון', document: 'מסמך' }[msg.type];
+          await forwardWhatsAppMessageToEmail({ fromNumber, fromName, text: `[${label}] ${caption}` });
+          await forwardToAppsScript(fromNumber, fromName, `[${label}] ${caption}`);
+          continue;
+        }
+
+        const text = msg.text?.body || '';
         logger.info('התקבלה הודעת וואטסאפ נכנסת', { fromNumber, fromName, text });
         addMessageToConversation(fromNumber, 'in', text, msg.id);
         await forwardWhatsAppMessageToEmail({ fromNumber, fromName, text });
@@ -272,6 +294,19 @@ app.get('/conversations', requireApiKey, (req, res) => {
 app.get('/conversations/:number', requireApiKey, (req, res) => {
   const messages = conversations.get(req.params.number) || [];
   res.json({ messages });
+});
+
+// הורדת תוכן מדיה בפועל (תמונה/קול/וידאו/מסמך) לפי mediaId - נקרא רק כשרוצים
+// להציג/להשמיע בפועל, כדי לא להעמיס את טעינת השיחה הראשונית בקבצים כבדים
+app.get('/media/:mediaId', requireApiKey, async (req, res) => {
+  try {
+    const result = await getMediaAsBase64(req.params.mediaId);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('route /media נכשל', details);
+    res.status(500).json({ error: details });
+  }
 });
 
 // ---------- לוגים: לצפייה מהאזור האישי ----------

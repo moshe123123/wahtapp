@@ -89,9 +89,22 @@ export async function sendWhatsAppText({ toNumber, text }) {
 }
 
 /**
- * מסמן הודעה נכנסת כ"נקראה" מול מטא - זה מה שגורם לוי-ים הכחולות להופיע
- * אצל השולח המקורי. messageId הוא ה-wamid שהתקבל ב-webhook (msg.id).
+ * מוריד תוכן מדיה (תמונה/הודעה קולית/וידאו) לפי mediaId שהתקבל ב-webhook.
+ * זה תהליך דו-שלבי במטא: קודם מבקשים את ה-URL הזמני (בתוקף לכמה דקות),
+ * ואז מורידים ממנו בפועל עם אותו טוקן הרשאה. מחזיר base64 כדי שאפשר
+ * להעביר את זה בקלות דרך שכבות ה-proxy (Apps Script) בפורמט JSON רגיל.
  */
+export async function getMediaAsBase64(mediaId) {
+  const client = graphClient();
+  const { data: meta } = await client.get(`/${mediaId}`);
+  // meta: { url, mime_type, sha256, file_size, id }
+  const binaryRes = await axios.get(meta.url, {
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+    responseType: 'arraybuffer',
+  });
+  const base64 = Buffer.from(binaryRes.data).toString('base64');
+  return { mimeType: meta.mime_type, base64, fileSize: meta.file_size };
+}
 export async function markMessageAsRead({ messageId }) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const client = graphClient();

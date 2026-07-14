@@ -43,10 +43,27 @@
   .tick-sent, .tick-delivered { color: #999; }
   .tick-read { color: #34B7F1; }
   .tick-failed { color: #c0392b; }
-  #inputRow { display: flex; border-top: 1px solid #ddd; background: #fff; }
+  #inputRow { display: flex; border-top: 1px solid #ddd; background: #fff; position: relative; }
   #inputRow input { flex: 1; border: none; padding: 14px; font-size: 14px; outline: none; }
   #inputRow button { background: #25D366; color: #fff; border: none; padding: 0 24px; cursor: pointer; font-size: 14px; }
+  #emojiBtn { background: #fff !important; color: #000 !important; font-size: 20px !important; padding: 0 12px !important; }
+  #emojiPanel { display: none; position: absolute; bottom: 54px; right: 8px; width: 260px; max-height: 220px; overflow-y: auto;
+    background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.15); padding: 8px;
+    grid-template-columns: repeat(8, 1fr); gap: 2px; }
+  #emojiPanel.open { display: grid; }
+  #emojiPanel span { cursor: pointer; font-size: 18px; text-align: center; padding: 4px; border-radius: 4px; }
+  #emojiPanel span:hover { background: #f0f0f0; }
   #empty { margin: auto; color: #888; }
+
+  /* מדיה בתוך בועות ההודעה */
+  .media-img { max-width: 220px; max-height: 220px; border-radius: 6px; display: block; cursor: pointer; }
+  .media-video { max-width: 240px; max-height: 240px; border-radius: 6px; display: block; }
+  audio { max-width: 230px; }
+  .caption { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
+  .media-load-btn { background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px;
+    cursor: pointer; font-size: 13px; display: block; }
+  .media-load-btn:disabled { opacity: .6; cursor: default; }
+  .doc-link { display: inline-block; padding: 8px 12px; background: #f0f0f0; border-radius: 6px; text-decoration: none; color: #075E54; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -87,6 +104,8 @@
       <div id="chatHeader">בחר שיחה, או התחל חדשה</div>
       <div id="messages"><div id="empty">אין שיחה נבחרת</div></div>
       <div id="inputRow">
+        <div id="emojiPanel"></div>
+        <button id="emojiBtn" disabled>😊</button>
         <input id="msgInput" placeholder="הקלד הודעה..." disabled />
         <button id="sendBtn" disabled>שלח</button>
       </div>

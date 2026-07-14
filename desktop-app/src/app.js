@@ -106,10 +106,14 @@ async function selectConversation(number) {
   document.getElementById('chatHeader').textContent = 'שיחה עם ' + number;
   document.getElementById('msgInput').disabled = false;
   document.getElementById('sendBtn').disabled = false;
+  document.getElementById('emojiBtn').disabled = false;
   await loadConversations();
   await loadMessages(number);
   callApi({ action: 'markRead', number }).catch(() => {}); // לא חוסם את הממשק אם זה נכשל
 }
+
+// מטמון תוכן מדיה שכבר הורד (מפתח: mediaId) - כדי לא להוריד מחדש בכל רענון
+const mediaCache = new Map();
 
 async function loadMessages(number) {
   const data = await callApi({ action: 'conversation', number });
@@ -124,13 +128,56 @@ async function loadMessages(number) {
     const dir = m.direction === 'out' ? 'out' : 'in';
     const time = formatTime(m.time);
     const ticks = dir === 'out' ? renderTicks(m.status) : '';
+    const isMedia = m.type && m.type !== 'text';
+    const content = isMedia
+      ? renderMediaContent(m)
+      : `<div class="bubble">${escapeHtml(m.text)}</div>`;
     return `<div class="msg ${dir}">
-      <div class="bubble">${escapeHtml(m.text)}</div>
+      ${content}
       <div class="mtime">${time}${ticks}</div>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
 }
+
+// מרנדר בועת מדיה: אם כבר במטמון - מציג בפועל (img/audio/video/קישור הורדה),
+// אחרת מציג כפתור "לחץ לטעינה" (טעינה לפי דרישה, לא אוטומטית לכל ההיסטוריה)
+function renderMediaContent(m) {
+  const cached = m.mediaId && mediaCache.get(m.mediaId);
+  const caption = m.text ? `<div class="caption">${escapeHtml(m.text)}</div>` : '';
+
+  if (cached) {
+    const dataUrl = `data:${cached.mimeType};base64,${cached.base64}`;
+    if (m.type === 'image') return `<div class="bubble media-bubble"><img class="media-img" src="${dataUrl}" alt="תמונה" />${caption}</div>`;
+    if (m.type === 'audio') return `<div class="bubble media-bubble"><audio controls src="${dataUrl}"></audio>${caption}</div>`;
+    if (m.type === 'video') return `<div class="bubble media-bubble"><video class="media-video" controls src="${dataUrl}"></video>${caption}</div>`;
+    if (m.type === 'document') return `<div class="bubble media-bubble"><a class="doc-link" href="${dataUrl}" download>📄 שמור מסמך</a>${caption}</div>`;
+  }
+  const label = { image: '🖼️ תמונה', audio: '🎤 הודעה קולית', video: '🎥 סרטון', document: '📄 מסמך' }[m.type] || 'קובץ';
+  return `<div class="bubble media-bubble">
+    <button class="media-load-btn" data-media-id="${m.mediaId || ''}">${label} — לחץ לטעינה</button>
+    ${caption}
+  </div>`;
+}
+
+// טעינת מדיה לפי דרישה - קליק על כפתור בתוך ההודעות (delegation, כי ה-HTML מתחדש כל רענון)
+document.getElementById('messages').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.media-load-btn');
+  if (!btn || !currentNumber) return;
+  const mediaId = btn.dataset.mediaId;
+  if (!mediaId) return;
+  btn.textContent = 'טוען...';
+  btn.disabled = true;
+  try {
+    const data = await callApi({ action: 'media', mediaId });
+    if (!data.ok || !data.base64) throw new Error('media fetch failed');
+    mediaCache.set(mediaId, { mimeType: data.mimeType, base64: data.base64 });
+    await loadMessages(currentNumber);
+  } catch (err) {
+    btn.textContent = '⚠ הטעינה נכשלה — לחץ לניסיון נוסף';
+    btn.disabled = false;
+  }
+});
 
 // מחזיר HTML של וי-ים לפי סטטוס ההודעה, בדיוק כמו בוואטסאפ:
 // sent = וי אפורה אחת | delivered = שתי וי אפורות | read = שתי וי כחולות | failed = סימן אדום
@@ -176,6 +223,40 @@ document.getElementById('startNew').addEventListener('click', () => {
   if (!number) return;
   document.getElementById('newNumber').value = '';
   selectConversation(number);
+});
+
+// ---------- פאנל אימוג'ים ----------
+const COMMON_EMOJIS = [
+  '😀','😂','😍','😊','😉','😎','🥰','😘','🤔','😅','😢','😭','😡','😱','🥳','🙏',
+  '👍','👎','👏','🙌','💪','🤝','✌️','👌','🤞','❤️','🧡','💛','💚','💙','💜','🖤',
+  '🔥','⭐','✨','🎉','🎂','🎁','☕','🍕','🍔','🍺','⚽','🚗','✈️','🏠','📞','📸',
+  '☀️','🌙','⏰','✅','❌','❓','❗','💯','🙈','🤣','😴','🤗','🤒','😇','🤦','🤷',
+];
+
+const emojiPanel = document.getElementById('emojiPanel');
+emojiPanel.innerHTML = COMMON_EMOJIS.map((em) => `<span>${em}</span>`).join('');
+
+document.getElementById('emojiBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  emojiPanel.classList.toggle('open');
+});
+
+emojiPanel.addEventListener('click', (e) => {
+  if (e.target.tagName !== 'SPAN') return;
+  const input = document.getElementById('msgInput');
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + e.target.textContent + input.value.slice(end);
+  const newPos = start + e.target.textContent.length;
+  input.focus();
+  input.setSelectionRange(newPos, newPos);
+});
+
+// סגירת הפאנל בלחיצה מחוץ לו
+document.addEventListener('click', (e) => {
+  if (!emojiPanel.contains(e.target) && e.target.id !== 'emojiBtn') {
+    emojiPanel.classList.remove('open');
+  }
 });
 
 init();

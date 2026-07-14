@@ -75,6 +75,21 @@ function markReadViaRender(number) {
   return JSON.parse(res.getContentText());
 }
 
+// הורדת תוכן מדיה (base64) עבור הודעה נכנסת - פרוקסי שקוף ל-Render
+function fetchMediaViaRender(mediaId) {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/media/' + encodeURIComponent(mediaId);
+  const res = UrlFetchApp.fetch(url, {
+    headers: { 'x-api-key': cfg.API_KEY },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    Logger.log('fetchMediaViaRender failed: ' + res.getContentText());
+    return { ok: false };
+  }
+  return JSON.parse(res.getContentText());
+}
+
 function doGet(e) {
   const params = e.parameter;
   const cfg = getConfig();
@@ -97,6 +112,9 @@ function doGet(e) {
   }
   if (params.action === 'markRead') {
     return jsonOutput(markReadViaRender(params.number));
+  }
+  if (params.action === 'media') {
+    return jsonOutput(fetchMediaViaRender(params.mediaId));
   }
 
   return jsonOutput({ error: 'unknown action' });
