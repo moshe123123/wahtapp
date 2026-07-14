@@ -87,3 +87,24 @@ export async function sendWhatsAppText({ toNumber, text }) {
     throw err;
   }
 }
+
+/**
+ * מסמן הודעה נכנסת כ"נקראה" מול מטא - זה מה שגורם לוי-ים הכחולות להופיע
+ * אצל השולח המקורי. messageId הוא ה-wamid שהתקבל ב-webhook (msg.id).
+ */
+export async function markMessageAsRead({ messageId }) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const client = graphClient();
+  try {
+    const { data } = await client.post(`/${phoneNumberId}/messages`, {
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: messageId,
+    });
+    logger.info('הודעה סומנה כנקראה', { messageId });
+    return data;
+  } catch (err) {
+    logger.error('סימון הודעה כנקראה נכשל', err.response?.data || err.message);
+    throw err;
+  }
+}

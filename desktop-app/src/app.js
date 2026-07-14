@@ -57,7 +57,10 @@ function startPolling() {
   stopPolling();
   pollTimer = setInterval(async () => {
     await loadConversations();
-    if (currentNumber) await loadMessages(currentNumber);
+    if (currentNumber) {
+      await loadMessages(currentNumber);
+      callApi({ action: 'markRead', number: currentNumber }).catch(() => {});
+    }
   }, 5000);
 }
 function stopPolling() {
@@ -105,6 +108,7 @@ async function selectConversation(number) {
   document.getElementById('sendBtn').disabled = false;
   await loadConversations();
   await loadMessages(number);
+  callApi({ action: 'markRead', number }).catch(() => {}); // לא חוסם את הממשק אם זה נכשל
 }
 
 async function loadMessages(number) {
@@ -119,12 +123,23 @@ async function loadMessages(number) {
   box.innerHTML = messages.map((m) => {
     const dir = m.direction === 'out' ? 'out' : 'in';
     const time = formatTime(m.time);
+    const ticks = dir === 'out' ? renderTicks(m.status) : '';
     return `<div class="msg ${dir}">
       <div class="bubble">${escapeHtml(m.text)}</div>
-      <div class="mtime">${time}</div>
+      <div class="mtime">${time}${ticks}</div>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
+}
+
+// מחזיר HTML של וי-ים לפי סטטוס ההודעה, בדיוק כמו בוואטסאפ:
+// sent = וי אפורה אחת | delivered = שתי וי אפורות | read = שתי וי כחולות | failed = סימן אדום
+function renderTicks(status) {
+  if (status === 'failed') return ' <span class="tick tick-failed" title="השליחה נכשלה">⚠</span>';
+  if (status === 'read') return ' <span class="tick tick-read" title="נקרא">✓✓</span>';
+  if (status === 'delivered') return ' <span class="tick tick-delivered" title="נמסר">✓✓</span>';
+  if (status === 'sent') return ' <span class="tick tick-sent" title="נשלח">✓</span>';
+  return '';
 }
 
 function formatTime(iso) {

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
 import axios from 'axios';
@@ -58,11 +58,33 @@ async function postFollowingRedirect(url, payload, maxHops = 5) {
 // זה מה שמאפשר ממשק התכתבות באזור האישי, בלי קשר לתוסף הכרום/Gmail
 const conversations = new Map();
 
-function addMessageToConversation(number, direction, text) {
+function addMessageToConversation(number, direction, text, id) {
   if (!conversations.has(number)) conversations.set(number, []);
   const list = conversations.get(number);
-  list.push({ direction, text, time: new Date().toISOString() }); // direction: 'in' | 'out'
+  // direction: 'in' | 'out'. status רלוונטי רק ל-'out': sent -> delivered -> read (או failed)
+  list.push({
+    id: id || null,
+    direction,
+    text,
+    time: new Date().toISOString(),
+    status: direction === 'out' ? 'sent' : undefined,
+  });
   if (list.length > 200) list.shift(); // הגבלת גודל למניעת גדילה אינסופית
+  return list[list.length - 1];
+}
+
+// מעדכן את הסטטוס (delivered/read/failed) של הודעה יוצאת ספציפית, לפי ה-wamid שחוזר מ-Meta
+function updateMessageStatus(wamid, status) {
+  for (const list of conversations.values()) {
+    const msg = list.find((m) => m.id === wamid);
+    if (msg) {
+      // לא "מדרגים" סטטוס אחורה (למשל read שמגיע אחרי delivered לא אמור לחזור ל-sent)
+      const rank = { sent: 1, delivered: 2, read: 3, failed: 1 };
+      if (!msg.status || rank[status] >= rank[msg.status]) msg.status = status;
+      return true;
+    }
+  }
+  return false;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -172,14 +194,16 @@ app.post('/webhook', async (req, res) => {
         const text = msg.text?.body || '';
 
         logger.info('התקבלה הודעת וואטסאפ נכנסת', { fromNumber, fromName, text });
-        addMessageToConversation(fromNumber, 'in', text);
+        addMessageToConversation(fromNumber, 'in', text, msg.id);
         await forwardWhatsAppMessageToEmail({ fromNumber, fromName, text });
         await forwardToAppsScript(fromNumber, fromName, text);
       }
     } else if (statuses && statuses.length) {
-      // עדכוני סטטוס (נשלח/נמסר/נקרא) - שימושי לדיבוג בעיות שליחה
+      // עדכוני סטטוס (נשלח/נמסר/נקרא) - אלה הוי-ים שרואים בממשק
       for (const s of statuses) {
         logger.info('עדכון סטטוס הודעה יוצאת', { id: s.id, status: s.status, recipient: s.recipient_id });
+        const found = updateMessageStatus(s.id, s.status); // 'sent' | 'delivered' | 'read' | 'failed'
+        if (!found) logger.warn('עדכון סטטוס להודעה שלא נמצאה במאגר (id ישן/restart)', s.id);
         if (s.errors) {
           logger.error('פרטי שגיאת שליחה', JSON.stringify(s.errors));
         }
@@ -203,13 +227,33 @@ app.post('/send', requireApiKey, async (req, res) => {
   }
   try {
     const data = await sendWhatsAppText({ toNumber, text });
-    addMessageToConversation(toNumber, 'out', text);
+    const wamid = data?.messages?.[0]?.id || null;
+    addMessageToConversation(toNumber, 'out', text, wamid);
     res.json({ ok: true, data });
   } catch (err) {
     const details = err.response?.data || err.message;
     logger.error('route /send נכשל', details);
+    // גם שליחה שנכשלה נרשמת בהיסטוריה, עם סטטוס failed - כדי שהמשתמש יראה שזה לא הגיע
+    const failedMsg = addMessageToConversation(toNumber, 'out', text, null);
+    failedMsg.status = 'failed';
     res.status(500).json({ error: details });
   }
+});
+
+// מסמן את כל ההודעות הנכנסות שטרם סומנו כ"נקראו" עבור מספר מסוים - נקרא כשפותחים שיחה בממשק
+app.post('/conversations/:number/mark-read', requireApiKey, async (req, res) => {
+  const number = req.params.number;
+  const list = conversations.get(number) || [];
+  const unread = list.filter((m) => m.direction === 'in' && m.id && !m.readByUs);
+  for (const msg of unread) {
+    try {
+      await markMessageAsRead({ messageId: msg.id });
+      msg.readByUs = true;
+    } catch (err) {
+      logger.error('סימון כנקרא נכשל עבור הודעה', msg.id);
+    }
+  }
+  res.json({ ok: true, marked: unread.length });
 });
 
 // ---------- שיחות: ממשק התכתבות פשוט מהאזור האישי ----------
