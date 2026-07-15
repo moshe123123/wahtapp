@@ -1,7 +1,7 @@
 {
   "name": "wathapp-desktop",
   "productName": "WA Bridge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "אפליקציית שולחן עבודה לגשר וואטסאפ-מייל",
   "main": "main.js",
   "scripts": {
