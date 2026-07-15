@@ -285,7 +285,7 @@ app.get('/conversations', requireApiKey, (req, res) => {
   const list = [...conversations.keys()].map((number) => {
     const msgs = conversations.get(number);
     const last = msgs[msgs.length - 1];
-    return { number, lastMessage: last?.text, lastTime: last?.time };
+    return { number, lastMessage: last?.text, lastTime: last?.time, lastDirection: last?.direction };
   });
   res.json({ conversations: list });
 });

@@ -1,9 +1,13 @@
-let settings = { scriptUrl: '', apiKey: '', defaultPrefix: '972' };
+let settings = { scriptUrl: '', apiKey: '', defaultPrefix: '972', contactNames: {}, prefs: { readReceipts: true, sound: true, dark: false } };
 let currentNumber = null;
 let pollTimer = null;
 
 async function init() {
   settings = await window.waSettings.get();
+  // תאימות לאחור - משתמשים ותיקים שנשמרו לפני שהתווספו contactNames/prefs
+  settings.contactNames = settings.contactNames || {};
+  settings.prefs = { readReceipts: true, sound: true, dark: false, ...(settings.prefs || {}) };
+  applyDarkMode();
   if (settings.scriptUrl && settings.apiKey) {
     document.getElementById('scriptUrl').value = settings.scriptUrl;
     document.getElementById('apiKey').value = settings.apiKey;
@@ -22,7 +26,7 @@ document.getElementById('saveSettings').addEventListener('click', async () => {
   try {
     const res = await callApi({ action: 'health' }, scriptUrl, apiKey);
     if (!res.ok) throw new Error('תשובה לא תקינה מהשרת');
-    settings = { scriptUrl, apiKey, defaultPrefix };
+    settings = { ...settings, scriptUrl, apiKey, defaultPrefix };
     await window.waSettings.set(settings);
     showApp();
   } catch (err) {
@@ -59,7 +63,9 @@ function startPolling() {
     await loadConversations();
     if (currentNumber) {
       await loadMessages(currentNumber);
-      callApi({ action: 'markRead', number: currentNumber }).catch(() => {});
+      if (settings.prefs.readReceipts) {
+        callApi({ action: 'markRead', number: currentNumber }).catch(() => {});
+      }
     }
   }, 5000);
 }
@@ -89,6 +95,9 @@ async function callApiPost(body, scriptUrl, apiKey) {
   return res.json();
 }
 
+let lastSeenTimes = new Map();
+let conversationsInitialized = false;
+
 async function loadConversations() {
   const data = await callApi({ action: 'conversations' });
   const list = data.conversations || [];
@@ -101,14 +110,29 @@ async function loadConversations() {
   }
   box.innerHTML = list.map((c) => {
     const active = c.number === currentNumber ? 'active' : '';
+    const displayName = settings.contactNames[c.number];
     return `<div class="contact ${active}" data-number="${c.number}">
       <div class="avatar">${String(c.number).slice(-2)}</div>
       <div class="cinfo">
-        <div class="cnum">${c.number}</div>
+        <div class="cnum">${displayName ? escapeHtml(displayName) : c.number}</div>
         <div class="clast">${(c.lastMessage || '').slice(0, 30)}</div>
       </div>
     </div>`;
   }).join('');
+
+  // צליל התראה על הודעה נכנסת חדשה - רק אחרי טעינה ראשונית, כדי לא לצפצף על היסטוריה קיימת
+  if (settings.prefs.sound) {
+    for (const c of list) {
+      const prevTime = lastSeenTimes.get(c.number);
+      if (conversationsInitialized && c.lastDirection === 'in' && c.lastTime && c.lastTime !== prevTime) {
+        playNotificationSound();
+      }
+      lastSeenTimes.set(c.number, c.lastTime);
+    }
+  } else {
+    for (const c of list) lastSeenTimes.set(c.number, c.lastTime);
+  }
+  conversationsInitialized = true;
 
   box.querySelectorAll('.contact').forEach((el) => {
     el.addEventListener('click', () => selectConversation(el.dataset.number));
@@ -117,14 +141,17 @@ async function loadConversations() {
 
 async function selectConversation(number) {
   currentNumber = number;
-  document.getElementById('chatHeader').textContent = 'שיחה עם ' + number;
+  const displayName = settings.contactNames[number];
+  document.getElementById('chatHeader').textContent = displayName ? `${displayName} (${number})` : 'שיחה עם ' + number;
   document.getElementById('msgInput').disabled = false;
   document.getElementById('sendBtn').disabled = false;
   document.getElementById('emojiBtn').disabled = false;
   document.getElementById('attachBtn').disabled = false;
   await loadConversations();
   await loadMessages(number);
-  callApi({ action: 'markRead', number }).catch(() => {}); // לא חוסם את הממשק אם זה נכשל
+  if (settings.prefs.readReceipts) {
+    callApi({ action: 'markRead', number }).catch(() => {}); // לא חוסם את הממשק אם זה נכשל
+  }
 }
 
 // מטמון תוכן מדיה שכבר הורד (מפתח: mediaId) - כדי לא להוריד מחדש בכל רענון
@@ -272,6 +299,78 @@ document.addEventListener('click', (e) => {
   if (!emojiPanel.contains(e.target) && e.target.id !== 'emojiBtn') {
     emojiPanel.classList.remove('open');
   }
+});
+
+// ---------- מצב כהה ----------
+function applyDarkMode() {
+  document.body.classList.toggle('dark', !!settings.prefs.dark);
+}
+
+// ---------- צליל התראה (מיוצר ברגע, בלי קובץ שמע חיצוני) ----------
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch { /* לא קריטי אם זה נכשל (למשל טאב לא פעיל) */ }
+}
+
+// ---------- מודל הגדרות אפליקציה (שמות אנשי קשר + העדפות) ----------
+document.getElementById('openAppSettings').addEventListener('click', () => {
+  document.getElementById('prefReadReceipts').checked = settings.prefs.readReceipts;
+  document.getElementById('prefSound').checked = settings.prefs.sound;
+  document.getElementById('prefDark').checked = settings.prefs.dark;
+  renderContactNamesList();
+  document.getElementById('appSettingsOverlay').classList.add('open');
+});
+
+function renderContactNamesList() {
+  const container = document.getElementById('contactNamesList');
+  const knownNumbers = Array.from(document.querySelectorAll('#contactList .contact')).map((el) => el.dataset.number);
+  const allNumbers = Array.from(new Set([...knownNumbers, ...Object.keys(settings.contactNames)]));
+  if (!allNumbers.length) {
+    container.innerHTML = '<div style="font-size:12px;color:#999;">אין עדיין אנשי קשר - יופיעו כאן אחרי שיחה ראשונה</div>';
+    return;
+  }
+  container.innerHTML = allNumbers.map((num) => `
+    <div class="contact-name-row">
+      <span class="cnr-number">${num}</span>
+      <input type="text" data-number="${num}" placeholder="שם (לא חובה)" value="${escapeHtml(settings.contactNames[num] || '')}" />
+    </div>
+  `).join('');
+}
+
+document.getElementById('saveAppSettings').addEventListener('click', async () => {
+  settings.prefs.readReceipts = document.getElementById('prefReadReceipts').checked;
+  settings.prefs.sound = document.getElementById('prefSound').checked;
+  settings.prefs.dark = document.getElementById('prefDark').checked;
+
+  const newNames = {};
+  document.querySelectorAll('#contactNamesList input').forEach((inp) => {
+    const val = inp.value.trim();
+    if (val) newNames[inp.dataset.number] = val;
+  });
+  settings.contactNames = newNames;
+
+  await window.waSettings.set(settings);
+  applyDarkMode();
+  document.getElementById('appSettingsOverlay').classList.remove('open');
+  await loadConversations();
+  if (currentNumber) {
+    const displayName = settings.contactNames[currentNumber];
+    document.getElementById('chatHeader').textContent = displayName ? `${displayName} (${currentNumber})` : 'שיחה עם ' + currentNumber;
+  }
+});
+
+document.getElementById('closeAppSettings').addEventListener('click', () => {
+  document.getElementById('appSettingsOverlay').classList.remove('open');
 });
 
 init();
