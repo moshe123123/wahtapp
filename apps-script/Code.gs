@@ -56,6 +56,21 @@ function sendViaRender(toNumber, text) {
   return { ok: res.getResponseCode() === 200, data: result };
 }
 
+// שליחת הודעת תבנית מאושרת - ליזום שיחה חדשה עם מספר שלא כתב ב-24 השעות האחרונות
+function sendTemplateViaRender(toNumber, templateName) {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/send-template';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': cfg.API_KEY },
+    payload: JSON.stringify({ toNumber, templateName, languageCode: 'he' }),
+    muteHttpExceptions: true,
+  });
+  const result = JSON.parse(res.getContentText());
+  return { ok: res.getResponseCode() === 200, data: result };
+}
+
 // מסמן אצל מטא את כל ההודעות הנכנסות ממספר מסוים כ"נקראו" - קוראים לזה
 // כשפותחים/מרעננים שיחה, כך שהוי-ים אצל השולח יהפכו לכחולות
 function markReadViaRender(number) {
@@ -125,6 +140,9 @@ function doGet(e) {
   }
   if (params.action === 'send') {
     return jsonOutput(sendViaRender(params.toNumber, params.text));
+  }
+  if (params.action === 'sendTemplate') {
+    return jsonOutput(sendTemplateViaRender(params.toNumber, params.templateName));
   }
   if (params.action === 'markRead') {
     return jsonOutput(markReadViaRender(params.number));

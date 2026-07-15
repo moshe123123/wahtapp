@@ -14,6 +14,33 @@ function graphClient() {
   });
 }
 
+/**
+ * שליחת הודעת תבנית מאושרת - הדרך היחידה ליזום שיחה עם מספר שלא כתב
+ * אליך ב-24 השעות האחרונות. בלי משתנים (התבנית start_conversation היא
+ * משפט קבוע), ולכן אין components בכלל.
+ */
+export async function sendWhatsAppTemplate({ toNumber, templateName, languageCode = 'he' }) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const client = graphClient();
+  logger.info('שולח הודעת תבנית (יזום שיחה)', { toNumber, templateName });
+  try {
+    const { data } = await client.post(`/${phoneNumberId}/messages`, {
+      messaging_product: 'whatsapp',
+      to: toNumber,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+      },
+    });
+    logger.info('הודעת תבנית נשלחה בהצלחה', data);
+    return data;
+  } catch (err) {
+    logger.error('שליחת תבנית נכשלה', err.response?.data || err.message);
+    throw err;
+  }
+}
+
 /** רישום המספר בפועל מול Cloud API (שלב טכני נדרש, נפרד מ-request_code/verify_code) */
 export async function registerPhoneNumber({ pin = '123456' } = {}) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;

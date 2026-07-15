@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
 import axios from 'axios';
@@ -262,6 +262,26 @@ app.post('/send', requireApiKey, async (req, res) => {
   }
 });
 
+// שליחת הודעת תבנית מאושרת - ליזום שיחה עם מספר שלא כתב ב-24 השעות האחרונות
+app.post('/send-template', requireApiKey, async (req, res) => {
+  const { toNumber, templateName, languageCode } = req.body || {};
+  if (!toNumber || !templateName) {
+    return res.status(400).json({ error: 'toNumber ו-templateName הם שדות חובה' });
+  }
+  try {
+    const data = await sendWhatsAppTemplate({ toNumber, templateName, languageCode });
+    const wamid = data?.messages?.[0]?.id || null;
+    addMessageToConversation(toNumber, 'out', `[הודעת פתיחה: ${templateName}]`, wamid);
+    res.json({ ok: true, data });
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('route /send-template נכשל', details);
+    const failedMsg = addMessageToConversation(toNumber, 'out', `[הודעת פתיחה: ${templateName}]`, null);
+    failedMsg.status = 'failed';
+    res.status(500).json({ error: details });
+  }
+});
+
 // מסמן את כל ההודעות הנכנסות שטרם סומנו כ"נקראו" עבור מספר מסוים - נקרא כשפותחים שיחה בממשק
 app.post('/conversations/:number/mark-read', requireApiKey, async (req, res) => {
   const number = req.params.number;
@@ -343,6 +363,37 @@ app.get('/logs', requireApiKey, (req, res) => {
 
 app.post('/logs/clear', requireApiKey, (req, res) => {
   logger.clear();
+  res.json({ ok: true });
+});
+
+// ---------- קליטת התראות מקבוצת וואטסאפ (מכשיר אנדרואיד נוסף + אפליקציית
+// notification-forwarder כמו BigShoots/NotificationWebhookApp) ----------
+// זה לא ה-Cloud API הרשמי בכלל - זו רק "קריאת התראה" ממכשיר אמיתי, ולכן
+// אין כאן שום סיכון חסימה. מוגן במפתח נפרד (לא ה-API_KEY הראשי) כי הכתובת
+// הזו חייבת להיות מוטבעת בתוך הגדרות אפליקציה חיצונית (לא בשליטתנו).
+// מזהה השיחה בממשק יהיה קבוע: 'family-group' (אפשר לתת לו שם תצוגה
+// "קבוצה משפחתית" דרך הגדרות אנשי הקשר שכבר קיימות באפליקציה).
+app.post('/family-notify', (req, res) => {
+  const key = req.query.key || req.body?.key;
+  if (!process.env.FAMILY_WEBHOOK_KEY || key !== process.env.FAMILY_WEBHOOK_KEY) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  // מבנה ה-JSON משתנה קצת בין אפליקציות forwarder שונות - מנסים כמה שמות שדה נפוצים
+  const body = req.body || {};
+  const appName = body.app || body.packageName || body.package || '';
+  const title = body.title || body.sender || '';
+  const text = body.text || body.message || body.content || body.bigText || '';
+
+  // מסננים החוצה התראות שהן לא מוואטסאפ, אם השדה קיים
+  if (appName && !String(appName).toLowerCase().includes('whatsapp')) {
+    return res.json({ ok: true, skipped: true });
+  }
+
+  const combinedText = title ? `${title}: ${text}` : text;
+  logger.info('התקבלה התראת קבוצה משפחתית', { title, text });
+  addMessageToConversation('family-group', 'in', combinedText || '(התראה ללא טקסט)', null);
+  forwardWhatsAppMessageToEmail({ fromNumber: 'family-group', fromName: 'קבוצה משפחתית', text: combinedText }).catch(() => {});
   res.json({ ok: true });
 });
 

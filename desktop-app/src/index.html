@@ -20,6 +20,7 @@
   #newChat { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid #eee; }
   #newChat input { flex: 1; padding: 6px; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; }
   #newChat button { background: #25D366; color: #fff; border: none; border-radius: 4px; padding: 0 10px; cursor: pointer; }
+  #startTemplate { background: #128C4A !important; font-size: 11px; white-space: nowrap; }
   #contactList { flex: 1; overflow-y: auto; }
   .contact { display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
   .contact:hover { background: #eee; }
@@ -132,6 +133,7 @@
       <div id="newChat">
         <input id="newNumber" placeholder="0548477910 או 972548477910" />
         <button id="startNew">התחל</button>
+        <button id="startTemplate" title="למספר שלא כתב אליך ב-24 השעות האחרונות">🚀 פתח שיחה</button>
       </div>
       <div id="contactList"></div>
     </div>

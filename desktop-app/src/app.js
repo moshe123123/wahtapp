@@ -267,6 +267,29 @@ document.getElementById('startNew').addEventListener('click', () => {
   selectConversation(number);
 });
 
+// "פתח שיחה" בתבנית - ליזום שיחה עם מספר שלא כתב ב-24 השעות האחרונות.
+// שם התבנית קבוע כאן (start_conversation) - צריך שתהיה מאושרת אצל מטא לפני שזה יעבוד.
+document.getElementById('startTemplate').addEventListener('click', async () => {
+  const raw = document.getElementById('newNumber').value.trim();
+  const number = normalizeNumber(raw);
+  if (!number) return;
+  const btn = document.getElementById('startTemplate');
+  const original = btn.textContent;
+  btn.textContent = 'שולח...';
+  btn.disabled = true;
+  try {
+    const result = await callApi({ action: 'sendTemplate', toNumber: number, templateName: 'start_conversation' });
+    if (!result.ok) throw new Error(JSON.stringify(result.data || result));
+    document.getElementById('newNumber').value = '';
+    await selectConversation(number);
+  } catch (err) {
+    alert('שליחת הודעת הפתיחה נכשלה - כנראה שהתבנית עדיין לא אושרה אצל מטא, או שגיאה אחרת:\n' + err.message);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+});
+
 // ---------- פאנל אימוג'ים ----------
 const COMMON_EMOJIS = [
   '😀','😂','😍','😊','😉','😎','🥰','😘','🤔','😅','😢','😭','😡','😱','🥳','🙏',
