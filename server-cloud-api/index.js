@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64 } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { logger } from './logger.js';
 import axios from 'axios';
@@ -95,7 +95,7 @@ function updateMessageStatus(wamid, status) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '25mb' })); // הוגדל כדי לתמוך בהעלאת תמונות/סרטונים כ-base64
 
 // מאפשר לתוסף הכרום (שרץ על הדומיין mail.google.com) לגשת ל-API של השרת -
 // בלי זה, הדפדפן חוסם את הבקשות מסיבות אבטחה (CORS)
@@ -294,6 +294,33 @@ app.get('/conversations', requireApiKey, (req, res) => {
 app.get('/conversations/:number', requireApiKey, (req, res) => {
   const messages = conversations.get(req.params.number) || [];
   res.json({ messages });
+});
+
+// שליחת קובץ מדיה (תמונה/וידאו/מסמך/קול) - הגוף כולל את הקובץ בפורמט base64
+// body: { toNumber, base64, mimeType, filename, caption }
+app.post('/send-media', requireApiKey, async (req, res) => {
+  const { toNumber, base64, mimeType, filename, caption } = req.body || {};
+  if (!toNumber || !base64 || !mimeType) {
+    return res.status(400).json({ error: 'toNumber, base64 ו-mimeType הם שדות חובה' });
+  }
+  const type = mimeType.startsWith('image/') ? 'image'
+    : mimeType.startsWith('video/') ? 'video'
+    : mimeType.startsWith('audio/') ? 'audio'
+    : 'document';
+
+  try {
+    const mediaId = await uploadMedia({ base64, mimeType, filename });
+    const data = await sendWhatsAppMedia({ toNumber, mediaId, type, caption });
+    const wamid = data?.messages?.[0]?.id || null;
+    addMessageToConversation(toNumber, 'out', caption || '', wamid, { type, mediaId, mimeType });
+    res.json({ ok: true, data });
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('route /send-media נכשל', details);
+    const failedMsg = addMessageToConversation(toNumber, 'out', caption || '', null, { type, mimeType });
+    failedMsg.status = 'failed';
+    res.status(500).json({ error: details });
+  }
 });
 
 // הורדת תוכן מדיה בפועל (תמונה/קול/וידאו/מסמך) לפי mediaId - נקרא רק כשרוצים

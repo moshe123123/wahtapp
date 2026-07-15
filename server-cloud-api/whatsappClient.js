@@ -1,4 +1,5 @@
 import axios from 'axios';
+import FormData from 'form-data';
 import { logger } from './logger.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
@@ -88,6 +89,53 @@ export async function sendWhatsAppText({ toNumber, text }) {
   }
 }
 
+/**
+ * מעלה קובץ (מ-base64) לשרתי מטא, ומחזיר media id שאיתו אפשר לשלוח הודעה.
+ * זה שלב נפרד ונדרש - אי אפשר לשלוח קובץ ישירות בתוך הודעה, קודם "מפקידים" אותו.
+ */
+export async function uploadMedia({ base64, mimeType, filename }) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const buffer = Buffer.from(base64, 'base64');
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', buffer, { filename: filename || 'file', contentType: mimeType });
+
+  try {
+    const { data } = await axios.post(`${GRAPH_BASE}/${phoneNumberId}/media`, form, {
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        ...form.getHeaders(),
+      },
+    });
+    logger.info('קובץ מדיה הועלה בהצלחה', { mediaId: data.id, mimeType });
+    return data.id;
+  } catch (err) {
+    logger.error('העלאת מדיה נכשלה', err.response?.data || err.message);
+    throw err;
+  }
+}
+
+/** שליחת הודעה יוצאת עם מדיה (תמונה/וידאו/מסמך) שכבר הועלתה, לפי media id */
+export async function sendWhatsAppMedia({ toNumber, mediaId, type, caption }) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const client = graphClient();
+  const mediaPayload = { id: mediaId };
+  if (caption && type !== 'audio') mediaPayload.caption = caption; // audio לא תומך בכיתוב אצל מטא
+
+  try {
+    const { data } = await client.post(`/${phoneNumberId}/messages`, {
+      messaging_product: 'whatsapp',
+      to: toNumber,
+      type,
+      [type]: mediaPayload,
+    });
+    logger.info('הודעת מדיה נשלחה בהצלחה', data);
+    return data;
+  } catch (err) {
+    logger.error('שליחת מדיה נכשלה', err.response?.data || err.message);
+    throw err;
+  }
+}
 /**
  * מוריד תוכן מדיה (תמונה/הודעה קולית/וידאו) לפי mediaId שהתקבל ב-webhook.
  * זה תהליך דו-שלבי במטא: קודם מבקשים את ה-URL הזמני (בתוקף לכמה דקות),

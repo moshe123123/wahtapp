@@ -47,6 +47,8 @@
   #inputRow input { flex: 1; border: none; padding: 14px; font-size: 14px; outline: none; }
   #inputRow button { background: #25D366; color: #fff; border: none; padding: 0 24px; cursor: pointer; font-size: 14px; }
   #emojiBtn { background: #fff !important; color: #000 !important; font-size: 20px !important; padding: 0 12px !important; }
+  #attachBtn { background: #fff !important; color: #000 !important; font-size: 20px !important; padding: 0 12px !important; }
+  #attachBtn:disabled, #emojiBtn:disabled { opacity: .4; }
   #emojiPanel { display: none; position: absolute; bottom: 54px; right: 8px; width: 260px; max-height: 220px; overflow-y: auto;
     background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.15); padding: 8px;
     grid-template-columns: repeat(8, 1fr); gap: 2px; }
@@ -105,6 +107,8 @@
       <div id="messages"><div id="empty">אין שיחה נבחרת</div></div>
       <div id="inputRow">
         <div id="emojiPanel"></div>
+        <input type="file" id="fileInput" accept="image/*,video/*,audio/*,application/pdf" style="display:none" />
+        <button id="attachBtn" disabled>📎</button>
         <button id="emojiBtn" disabled>😊</button>
         <input id="msgInput" placeholder="הקלד הודעה..." disabled />
         <button id="sendBtn" disabled>שלח</button>

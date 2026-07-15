@@ -90,6 +90,22 @@ function fetchMediaViaRender(mediaId) {
   return JSON.parse(res.getContentText());
 }
 
+// שליחת קובץ מדיה (תמונה/וידאו/מסמך/קול) יוצא - הגוף גדול מדי בשביל GET,
+// ולכן זה עובר דרך doPost עם payload בגוף הבקשה (לא ב-URL)
+function sendMediaViaRender(payload) {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/send-media';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': cfg.API_KEY },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+  const result = JSON.parse(res.getContentText());
+  return { ok: res.getResponseCode() === 200, data: result };
+}
+
 function doGet(e) {
   const params = e.parameter;
   const cfg = getConfig();
@@ -115,6 +131,34 @@ function doGet(e) {
   }
   if (params.action === 'media') {
     return jsonOutput(fetchMediaViaRender(params.mediaId));
+  }
+
+  return jsonOutput({ error: 'unknown action' });
+}
+
+// בקשות POST - כרגע רק שליחת מדיה (הגוף גדול מדי בשביל query params ב-GET).
+// הגוף חייב לכלול apiKey (כי אין query params כאן), וגם action.
+function doPost(e) {
+  const cfg = getConfig();
+  let body;
+  try {
+    body = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return jsonOutput({ error: 'invalid JSON body' });
+  }
+
+  if (body.apiKey !== cfg.API_KEY) {
+    return jsonOutput({ error: 'unauthorized' });
+  }
+
+  if (body.action === 'sendMedia') {
+    return jsonOutput(sendMediaViaRender({
+      toNumber: body.toNumber,
+      base64: body.base64,
+      mimeType: body.mimeType,
+      filename: body.filename,
+      caption: body.caption,
+    }));
   }
 
   return jsonOutput({ error: 'unknown action' });

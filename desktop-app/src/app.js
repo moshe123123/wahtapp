@@ -75,6 +75,20 @@ async function callApi(params, scriptUrl, apiKey) {
   return res.json();
 }
 
+// גרסת POST - נדרשת לשליחת קבצים (base64 גדול מדי בשביל query string של GET).
+// content-type נשאר text/plain בכוונה (לא application/json) כדי למנוע CORS
+// preflight מול Apps Script - הוא לא בודק Content-Type, רק קורא את הגוף הגולמי.
+async function callApiPost(body, scriptUrl, apiKey) {
+  const url = scriptUrl || settings.scriptUrl;
+  const payload = { apiKey: apiKey || settings.apiKey, ...body };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 async function loadConversations() {
   const data = await callApi({ action: 'conversations' });
   const list = data.conversations || [];
@@ -107,6 +121,7 @@ async function selectConversation(number) {
   document.getElementById('msgInput').disabled = false;
   document.getElementById('sendBtn').disabled = false;
   document.getElementById('emojiBtn').disabled = false;
+  document.getElementById('attachBtn').disabled = false;
   await loadConversations();
   await loadMessages(number);
   callApi({ action: 'markRead', number }).catch(() => {}); // לא חוסם את הממשק אם זה נכשל
@@ -260,3 +275,56 @@ document.addEventListener('click', (e) => {
 });
 
 init();
+
+// ---------- שליחת קבצי מדיה (תמונה/וידאו/קול/מסמך) ----------
+document.getElementById('attachBtn').addEventListener('click', () => {
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // מאפשר לבחור שוב את אותו קובץ בפעם הבאה
+  if (!file || !currentNumber) return;
+
+  // מגבלת גודל של מטא: תמונות עד 5MB, וידאו/מסמכים עד 16MB
+  if (file.size > 16 * 1024 * 1024) {
+    alert('הקובץ גדול מדי (מעל 16MB) - וואטסאפ לא תאפשר לשלוח אותו');
+    return;
+  }
+
+  const attachBtn = document.getElementById('attachBtn');
+  const originalLabel = attachBtn.textContent;
+  attachBtn.textContent = '⏳';
+  attachBtn.disabled = true;
+
+  try {
+    const base64 = await fileToBase64(file);
+    const caption = document.getElementById('msgInput').value.trim();
+    const result = await callApiPost({
+      action: 'sendMedia',
+      toNumber: currentNumber,
+      base64,
+      mimeType: file.type || 'application/octet-stream',
+      filename: file.name,
+      caption,
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.data || result));
+    document.getElementById('msgInput').value = '';
+    await loadMessages(currentNumber);
+    await loadConversations();
+  } catch (err) {
+    alert('שליחת הקובץ נכשלה: ' + err.message);
+  } finally {
+    attachBtn.textContent = originalLabel;
+    attachBtn.disabled = false;
+  }
+});
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]); // מסיר את ה-prefix "data:...;base64,"
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
