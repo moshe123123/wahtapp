@@ -1,6 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+Menu.setApplicationMenu(null); // מסיר את סרגל התפריטים המיותר (Help/Window/View/Edit/File)
 
 // קובץ ההגדרות נשמר בתיקיית ה-userData הרגילה של Electron
 // (זו בדיוק התיקייה C:\Users\<שם>\AppData\Roaming\wathapp-desktop שכבר מצאת)
