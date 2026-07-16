@@ -401,7 +401,7 @@ app.post('/family-notify', (req, res) => {
 // ומחליף אותו בטוקן דרך Graph API, כדי לראות אילו נכסים (WABA/מספר) התקבלו בפועל
 app.post('/coexistence/exchange', async (req, res) => {
   try {
-    const { code } = req.body;
+    const { code, redirect_uri } = req.body;
     if (!code) return res.status(400).json({ error: 'חסר code בבקשה' });
 
     const appId = process.env.META_APP_ID;
@@ -415,6 +415,7 @@ app.post('/coexistence/exchange', async (req, res) => {
         client_id: appId,
         client_secret: appSecret,
         code,
+        redirect_uri,
       },
     });
 
