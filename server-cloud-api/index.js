@@ -397,6 +397,36 @@ app.post('/family-notify', (req, res) => {
   res.json({ ok: true });
 });
 
+// endpoint חד-פעמי: מקבל את ה-code שהתקבל מתהליך ה-Embedded Signup (Coexistence)
+// ומחליף אותו בטוקן דרך Graph API, כדי לראות אילו נכסים (WABA/מספר) התקבלו בפועל
+app.post('/coexistence/exchange', async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'חסר code בבקשה' });
+
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    if (!appId || !appSecret) {
+      return res.status(500).json({ error: 'חסרים METAAPP_ID / META_APP_SECRET במשתני הסביבה של השרת' });
+    }
+
+    const { data } = await axios.get('https://graph.facebook.com/v22.0/oauth/access_token', {
+      params: {
+        client_id: appId,
+        client_secret: appSecret,
+        code,
+      },
+    });
+
+    logger.info('תוצאת החלפת קוד Coexistence: ' + JSON.stringify(data));
+    res.json(data);
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('שגיאה בהחלפת קוד Coexistence: ' + JSON.stringify(details));
+    res.status(500).json({ error: details });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // תפיסת שגיאות גלובליות שלא נתפסו בקוד - כדי שגם הן יופיעו בלוג ולא "ייעלמו" בשקט

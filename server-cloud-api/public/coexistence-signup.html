@@ -59,8 +59,21 @@
       function (response) {
         if (response.authResponse) {
           var code = response.authResponse.code;
-          showStatus('התחברות הצליחה!\n\nהקוד שהתקבל (יש להעביר אותו לשרת כדי להשלים את התהליך):\n\n' + code, 'success');
+          showStatus('התחברות הצליחה! שולח את הקוד לשרת להשלמת התהליך...', 'info');
           console.log('Embedded Signup code:', code);
+
+          fetch('/coexistence/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code }),
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              showStatus('תוצאה מהשרת:\n\n' + JSON.stringify(data, null, 2), data.error ? 'error' : 'success');
+            })
+            .catch(function (err) {
+              showStatus('שגיאה בשליחה לשרת: ' + err.message, 'error');
+            });
         } else {
           showStatus('ההתחברות בוטלה או לא הושלמה במלואה. אפשר לנסות שוב.', 'error');
         }
