@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8" />
+<title>חיבור Coexistence - Wathapp Bridge</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 60px auto; padding: 0 20px; text-align: center; }
+  button { background: #25D366; color: white; border: none; padding: 16px 32px; font-size: 18px; border-radius: 8px; cursor: pointer; }
+  button:hover { background: #1ebe5b; }
+  #status { margin-top: 20px; padding: 15px; border-radius: 8px; font-family: monospace; text-align: right; white-space: pre-wrap; display: none; }
+  .info { background: #f0f0f0; }
+  .success { background: #d4edda; }
+  .error { background: #f8d7da; }
+</style>
+</head>
+<body>
+
+<h2>חיבור מספר קיים (Coexistence)</h2>
+<p>לחיצה על הכפתור תפתח את חלון ה-Login של פייסבוק. בשלב הראשון בו, יש לבחור באפשרות<br>
+<strong>"Connect a WhatsApp Business App"</strong> (לא "Create a new WhatsApp Business Account")</p>
+
+<button onclick="launchWhatsAppSignup()">🔗 התחל חיבור Coexistence</button>
+
+<div id="status"></div>
+
+<script>
+  window.fbAsyncInit = function () {
+    FB.init({
+      appId: '1046015734673130',
+      cookie: true,
+      xfbml: true,
+      version: 'v22.0',
+    });
+  };
+
+  (function (d, s, id) {
+    var js, fjs = d.getElementsByTagName(s)[0];
+    if (d.getElementById(id)) return;
+    js = d.createElement(s);
+    js.id = id;
+    js.setAttribute('defer', true);
+    js.src = 'https://connect.facebook.net/en_US/sdk.js';
+    fjs.parentNode.insertBefore(js, fjs);
+  })(document, 'script', 'facebook-jssdk');
+
+  function showStatus(text, cls) {
+    var el = document.getElementById('status');
+    el.style.display = 'block';
+    el.className = cls;
+    el.textContent = text;
+  }
+
+  function launchWhatsAppSignup() {
+    // TODO: יש להחליף את הערך למטה ב-config_id האמיתי
+    // (נוצר תחת: kooo -> Facebook Login for Business -> Configurations)
+    var CONFIG_ID = '1797816494925699';
+
+    FB.login(
+      function (response) {
+        if (response.authResponse) {
+          var code = response.authResponse.code;
+          showStatus('התחברות הצליחה!\n\nהקוד שהתקבל (יש להעביר אותו לשרת כדי להשלים את התהליך):\n\n' + code, 'success');
+          console.log('Embedded Signup code:', code);
+        } else {
+          showStatus('ההתחברות בוטלה או לא הושלמה במלואה. אפשר לנסות שוב.', 'error');
+        }
+      },
+      {
+        config_id: CONFIG_ID,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: {
+          setup: {},
+          sessionInfoVersion: 3,
+          featureType: 'whatsapp_business_app_onboarding',
+        },
+      }
+    );
+  }
+
+  showStatus('טוען SDK של פייסבוק...', 'info');
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (typeof FB !== 'undefined') {
+        document.getElementById('status').style.display = 'none';
+      }
+    }, 1500);
+  });
+</script>
+
+</body>
+</html>
