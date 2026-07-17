@@ -290,27 +290,21 @@ document.getElementById('startTemplate').addEventListener('click', async () => {
   }
 });
 
-// "בקש פתיחה" - שולח SMS רגיל (לא וואטסאפ) שמבקש מהצד השני לכתוב הודעת
-// וואטסאפ ראשונה. חינמי לגמרי - לא נוגע ב-WhatsApp API בכלל. דורש חשבון
-// Twilio מוגדר בשרת, ושהמספר יהיה מאומת בקונסולת Twilio (אם Trial).
-document.getElementById('requestOpen').addEventListener('click', async () => {
+// "קישור" - יוצר קישור wa.me מוכן (עם הודעה כתובה מראש), ומעתיק ללוח.
+// אתה שולח אותו בעצמך בכל ערוץ שנוח (מייל אישי, SMS רגיל, בעל פה) - אין
+// כאן שום שירות צד ג', אין אימות, ולא נראה חשוד כי זה מגיע ממך ולא מ"בוט".
+// ברגע שהצד השני לוחץ על הקישור ושולח - חלון 24 השעות נפתח בחינם.
+document.getElementById('getLink').addEventListener('click', async () => {
   const raw = document.getElementById('newNumber').value.trim();
   const number = normalizeNumber(raw);
   if (!number) return;
-  const btn = document.getElementById('requestOpen');
-  const original = btn.textContent;
-  btn.textContent = 'שולח...';
-  btn.disabled = true;
+  const message = 'שלום! רציתי לדבר איתך בוואטסאפ - זה קישור שפותח שיחה איתי, רק צריך ללחוץ שלח 🙂';
+  const link = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
   try {
-    const result = await callApi({ action: 'requestOpen', toNumber: number, senderName: '' });
-    if (!result.ok) throw new Error(JSON.stringify(result.data || result));
-    document.getElementById('newNumber').value = '';
-    await selectConversation(number);
-  } catch (err) {
-    alert('שליחת ה-SMS נכשלה - בדוק שהמספר מאומת בקונסולת Twilio (אם Trial), ושפרטי Twilio מוגדרים בשרת:\n' + err.message);
-  } finally {
-    btn.textContent = original;
-    btn.disabled = false;
+    await navigator.clipboard.writeText(link);
+    alert('הקישור הועתק ללוח! (Ctrl+V כדי להדביק)\n\n' + link + '\n\nשלח אותו במייל האישי שלך, ב-SMS הרגיל, או תגיד לו בעל פה - ברגע שהוא ילחץ וישלח, השיחה תיפתח כאן.');
+  } catch {
+    prompt('העתק את הקישור ידנית (Ctrl+C):', link);
   }
 });
 
