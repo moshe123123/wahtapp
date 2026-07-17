@@ -290,6 +290,30 @@ document.getElementById('startTemplate').addEventListener('click', async () => {
   }
 });
 
+// "בקש פתיחה" - שולח SMS רגיל (לא וואטסאפ) שמבקש מהצד השני לכתוב הודעת
+// וואטסאפ ראשונה. חינמי לגמרי - לא נוגע ב-WhatsApp API בכלל. דורש חשבון
+// Twilio מוגדר בשרת, ושהמספר יהיה מאומת בקונסולת Twilio (אם Trial).
+document.getElementById('requestOpen').addEventListener('click', async () => {
+  const raw = document.getElementById('newNumber').value.trim();
+  const number = normalizeNumber(raw);
+  if (!number) return;
+  const btn = document.getElementById('requestOpen');
+  const original = btn.textContent;
+  btn.textContent = 'שולח...';
+  btn.disabled = true;
+  try {
+    const result = await callApi({ action: 'requestOpen', toNumber: number, senderName: '' });
+    if (!result.ok) throw new Error(JSON.stringify(result.data || result));
+    document.getElementById('newNumber').value = '';
+    await selectConversation(number);
+  } catch (err) {
+    alert('שליחת ה-SMS נכשלה - בדוק שהמספר מאומת בקונסולת Twilio (אם Trial), ושפרטי Twilio מוגדרים בשרת:\n' + err.message);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+});
+
 // ---------- פאנל אימוג'ים ----------
 const COMMON_EMOJIS = [
   '😀','😂','😍','😊','😉','😎','🥰','😘','🤔','😅','😢','😭','😡','😱','🥳','🙏',

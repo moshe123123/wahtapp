@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
+import { sendOpeningRequestSms } from './smsClient.js';
 import { logger } from './logger.js';
 import axios from 'axios';
 
@@ -278,6 +279,24 @@ app.post('/send-template', requireApiKey, async (req, res) => {
     logger.error('route /send-template נכשל', details);
     const failedMsg = addMessageToConversation(toNumber, 'out', `[הודעת פתיחה: ${templateName}]`, null);
     failedMsg.status = 'failed';
+    res.status(500).json({ error: details });
+  }
+});
+
+// בקשת פתיחת שיחה דרך SMS (לא וואטסאפ!) - עוקף לגמרי את דרישת התשלום/
+// התבנית של מטא. שולח SMS רגיל שמבקש מהנמען לכתוב הודעת וואטסאפ ראשונה.
+app.post('/request-open', requireApiKey, async (req, res) => {
+  const { toNumber, senderName } = req.body || {};
+  if (!toNumber) {
+    return res.status(400).json({ error: 'toNumber הוא שדה חובה' });
+  }
+  try {
+    const data = await sendOpeningRequestSms({ toNumber, senderName });
+    addMessageToConversation(toNumber, 'out', '[נשלחה בקשת פתיחה ב-SMS]', null);
+    res.json({ ok: true, data });
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('route /request-open נכשל', details);
     res.status(500).json({ error: details });
   }
 });

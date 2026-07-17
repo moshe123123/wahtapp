@@ -71,6 +71,22 @@ function sendTemplateViaRender(toNumber, templateName) {
   return { ok: res.getResponseCode() === 200, data: result };
 }
 
+// בקשת פתיחת שיחה דרך SMS (חינמי, לא נוגע ב-WhatsApp API) - שולח SMS
+// שמבקש מהנמען לכתוב הודעת וואטסאפ ראשונה, זה פותח את חלון 24 השעות בחינם
+function requestOpenViaRender(toNumber, senderName) {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/request-open';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': cfg.API_KEY },
+    payload: JSON.stringify({ toNumber, senderName }),
+    muteHttpExceptions: true,
+  });
+  const result = JSON.parse(res.getContentText());
+  return { ok: res.getResponseCode() === 200, data: result };
+}
+
 // מסמן אצל מטא את כל ההודעות הנכנסות ממספר מסוים כ"נקראו" - קוראים לזה
 // כשפותחים/מרעננים שיחה, כך שהוי-ים אצל השולח יהפכו לכחולות
 function markReadViaRender(number) {
@@ -143,6 +159,9 @@ function doGet(e) {
   }
   if (params.action === 'sendTemplate') {
     return jsonOutput(sendTemplateViaRender(params.toNumber, params.templateName));
+  }
+  if (params.action === 'requestOpen') {
+    return jsonOutput(requestOpenViaRender(params.toNumber, params.senderName));
   }
   if (params.action === 'markRead') {
     return jsonOutput(markReadViaRender(params.number));
