@@ -4,11 +4,11 @@ import { logger } from './logger.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 
-function graphClient() {
+function graphClient(accessToken) {
   return axios.create({
     baseURL: GRAPH_BASE,
     headers: {
-      Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${accessToken || process.env.WHATSAPP_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
     },
   });
@@ -37,6 +37,37 @@ export async function sendWhatsAppTemplate({ toNumber, templateName, languageCod
     return data;
   } catch (err) {
     logger.error('שליחת תבנית נכשלה', err.response?.data || err.message);
+    throw err;
+  }
+}
+
+/**
+ * יזום שיחה **חינמי לגמרי**, דרך "מספר הבדיקה" (Test Number) שמטא נותנת
+ * לכל אפליקציית Developer - לא דורש כרטיס אשראי, לא דורש billing eligibility.
+ * מגבלה: עד 5 נמענים, וכל נמען חייב לעבור אימות חד-פעמי (קוד שמגיע לו
+ * *בתוך* וואטסאפ עצמה) לפני שאפשר לשלוח אליו - זה נעשה ידנית פעם אחת
+ * דרך developers.facebook.com, לא משהו שהקוד הזה עושה.
+ * ההודעות יגיעו מהמספר האמריקאי של הבדיקה, לא מהמספר העסקי הרגיל.
+ */
+export async function sendTestConversationStarter({ toNumber, templateName = 'hello_world', languageCode = 'en_US' }) {
+  const phoneNumberId = process.env.WHATSAPP_TEST_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_TEST_ACCESS_TOKEN; // אם לא מוגדר, ייפול חזרה לטוקן הרגיל
+  const client = graphClient(accessToken);
+  logger.info('שולח יזום שיחה חינמי דרך מספר הבדיקה', { toNumber, phoneNumberId });
+  try {
+    const { data } = await client.post(`/${phoneNumberId}/messages`, {
+      messaging_product: 'whatsapp',
+      to: toNumber,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+      },
+    });
+    logger.info('הודעת בדיקה נשלחה בהצלחה', data);
+    return data;
+  } catch (err) {
+    logger.error('שליחה ממספר הבדיקה נכשלה', err.response?.data || err.message);
     throw err;
   }
 }

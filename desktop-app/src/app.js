@@ -308,6 +308,30 @@ document.getElementById('getLink').addEventListener('click', async () => {
   }
 });
 
+// "🆓 חינם" - יזום שיחה דרך מספר הבדיקה החינמי של מטא. עובד רק עם מספרים
+// שכבר אומתו מראש ב-developers.facebook.com (עד 5 נמענים). ההודעה תגיע
+// מהמספר האמריקאי של הבדיקה, לא מהמספר העסקי הרגיל.
+document.getElementById('sendTestConversation').addEventListener('click', async () => {
+  const raw = document.getElementById('newNumber').value.trim();
+  const number = normalizeNumber(raw);
+  if (!number) return;
+  const btn = document.getElementById('sendTestConversation');
+  const original = btn.textContent;
+  btn.textContent = 'שולח...';
+  btn.disabled = true;
+  try {
+    const result = await callApi({ action: 'sendTestConversation', toNumber: number });
+    if (!result.ok) throw new Error(JSON.stringify(result.data || result));
+    document.getElementById('newNumber').value = '';
+    await selectConversation(number);
+  } catch (err) {
+    alert('שליחה נכשלה - וודא שהמספר הזה כבר אומת מראש ב-developers.facebook.com (עד 5 נמענים בסה"כ):\n' + err.message);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+});
+
 // ---------- פאנל אימוג'ים ----------
 const COMMON_EMOJIS = [
   '😀','😂','😍','😊','😉','😎','🥰','😘','🤔','😅','😢','😭','😡','😱','🥳','🙏',

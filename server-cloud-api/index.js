@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate, sendTestConversationStarter } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { sendOpeningRequestSms } from './smsClient.js';
 import { logger } from './logger.js';
@@ -278,6 +278,27 @@ app.post('/send-template', requireApiKey, async (req, res) => {
     const details = err.response?.data || err.message;
     logger.error('route /send-template נכשל', details);
     const failedMsg = addMessageToConversation(toNumber, 'out', `[הודעת פתיחה: ${templateName}]`, null);
+    failedMsg.status = 'failed';
+    res.status(500).json({ error: details });
+  }
+});
+
+// יזום שיחה חינמי לגמרי, דרך מספר הבדיקה (Test Number) של מטא - עד 5
+// נמענים, כל אחד חייב אימות חד-פעמי מראש דרך developers.facebook.com
+app.post('/send-test-conversation', requireApiKey, async (req, res) => {
+  const { toNumber } = req.body || {};
+  if (!toNumber) {
+    return res.status(400).json({ error: 'toNumber הוא שדה חובה' });
+  }
+  try {
+    const data = await sendTestConversationStarter({ toNumber });
+    const wamid = data?.messages?.[0]?.id || null;
+    addMessageToConversation(toNumber, 'out', '[יזום שיחה - מספר בדיקה חינמי]', wamid);
+    res.json({ ok: true, data });
+  } catch (err) {
+    const details = err.response?.data || err.message;
+    logger.error('route /send-test-conversation נכשל', details);
+    const failedMsg = addMessageToConversation(toNumber, 'out', '[יזום שיחה - מספר בדיקה חינמי]', null);
     failedMsg.status = 'failed';
     res.status(500).json({ error: details });
   }

@@ -71,6 +71,21 @@ function sendTemplateViaRender(toNumber, templateName) {
   return { ok: res.getResponseCode() === 200, data: result };
 }
 
+// יזום שיחה חינמי לגמרי דרך מספר הבדיקה של מטא (עד 5 נמענים מאומתים)
+function sendTestConversationViaRender(toNumber) {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/send-test-conversation';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': cfg.API_KEY },
+    payload: JSON.stringify({ toNumber }),
+    muteHttpExceptions: true,
+  });
+  const result = JSON.parse(res.getContentText());
+  return { ok: res.getResponseCode() === 200, data: result };
+}
+
 // בקשת פתיחת שיחה דרך SMS (חינמי, לא נוגע ב-WhatsApp API) - שולח SMS
 // שמבקש מהנמען לכתוב הודעת וואטסאפ ראשונה, זה פותח את חלון 24 השעות בחינם
 function requestOpenViaRender(toNumber, senderName) {
@@ -159,6 +174,9 @@ function doGet(e) {
   }
   if (params.action === 'sendTemplate') {
     return jsonOutput(sendTemplateViaRender(params.toNumber, params.templateName));
+  }
+  if (params.action === 'sendTestConversation') {
+    return jsonOutput(sendTestConversationViaRender(params.toNumber));
   }
   if (params.action === 'requestOpen') {
     return jsonOutput(requestOpenViaRender(params.toNumber, params.senderName));

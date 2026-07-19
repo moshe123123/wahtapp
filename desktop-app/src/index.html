@@ -24,6 +24,7 @@
     flex: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   #startTemplate { background: #128C4A !important; }
   #getLink { background: #1A73E8 !important; }
+  #sendTestConversation { background: #E67E22 !important; }
   #contactList { flex: 1; overflow-y: auto; }
   .contact { display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
   .contact:hover { background: #eee; }
@@ -138,7 +139,10 @@
         <div id="newChatButtons">
           <button id="startNew" title="שיחה רגילה (רק אם כבר כתבו אליך ב-24 שעות)">💬 התחל</button>
           <button id="startTemplate" title="למספר שלא כתב אליך ב-24 השעות האחרונות (תבנית בתשלום)">🚀 פתח</button>
+        </div>
+        <div id="newChatButtons">
           <button id="getLink" title="יוצר קישור מוכן שאתה שולח בעצמך (מייל/SMS/בעל פה) - חינמי, לא נראה חשוד">🔗 קישור</button>
+          <button id="sendTestConversation" title="יזום שיחה חינמי דרך מספר הבדיקה של מטא - הנמען חייב להיות מאומת מראש">🆓 חינם</button>
         </div>
       </div>
       <div id="contactList"></div>
