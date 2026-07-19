@@ -86,6 +86,34 @@ function sendTestConversationViaRender(toNumber) {
   return { ok: res.getResponseCode() === 200, data: result };
 }
 
+// שליפת הגדרות מסונכרנות (שמות אנשי קשר, העדפות) מהשרת
+function getSettingsViaRender() {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/settings';
+  const res = UrlFetchApp.fetch(url, {
+    headers: { 'x-api-key': cfg.API_KEY },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    return { ok: false };
+  }
+  return JSON.parse(res.getContentText());
+}
+
+// שמירת הגדרות מסונכרנות לשרת
+function saveSettingsViaRender(settings) {
+  const cfg = getConfig();
+  const url = cfg.RENDER_URL + '/settings';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': cfg.API_KEY },
+    payload: JSON.stringify(settings),
+    muteHttpExceptions: true,
+  });
+  return { ok: res.getResponseCode() === 200 };
+}
+
 // בקשת פתיחת שיחה דרך SMS (חינמי, לא נוגע ב-WhatsApp API) - שולח SMS
 // שמבקש מהנמען לכתוב הודעת וואטסאפ ראשונה, זה פותח את חלון 24 השעות בחינם
 function requestOpenViaRender(toNumber, senderName) {
@@ -178,6 +206,9 @@ function doGet(e) {
   if (params.action === 'sendTestConversation') {
     return jsonOutput(sendTestConversationViaRender(params.toNumber));
   }
+  if (params.action === 'getSettings') {
+    return jsonOutput(getSettingsViaRender());
+  }
   if (params.action === 'requestOpen') {
     return jsonOutput(requestOpenViaRender(params.toNumber, params.senderName));
   }
@@ -214,6 +245,9 @@ function doPost(e) {
       filename: body.filename,
       caption: body.caption,
     }));
+  }
+  if (body.action === 'saveSettings') {
+    return jsonOutput(saveSettingsViaRender(body.settings));
   }
 
   return jsonOutput({ error: 'unknown action' });

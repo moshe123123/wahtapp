@@ -27,6 +27,10 @@
   #sendTestConversation { background: #E67E22 !important; }
   #contactList { flex: 1; overflow-y: auto; }
   .contact { display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+  .contact-delete { opacity: 0; background: none; border: none; color: #c0392b; font-size: 14px; cursor: pointer;
+    padding: 4px 6px; border-radius: 4px; transition: opacity .15s; flex-shrink: 0; }
+  .contact:hover .contact-delete { opacity: 1; }
+  .contact-delete:hover { background: #fdecea; }
   .contact:hover { background: #eee; }
   .contact.active { background: #dcf3e6; }
   .avatar { width: 34px; height: 34px; border-radius: 17px; background: #128C4A; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
@@ -84,7 +88,10 @@
   .contact-name-row input { flex: 1; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
   #appSettingsModal button { padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; flex: 1; }
   #saveAppSettings { background: #25D366; color: #fff; }
-  #closeAppSettings.secondary { background: #eee; color: #333; }
+  .secondary { background: #eee; color: #333; }
+  #versionRow { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #555; }
+  #versionRow button { flex: none !important; padding: 6px 10px !important; font-size: 11px !important; }
+  #updateStatus { font-size: 12px; color: #128C4A; margin-top: 6px; min-height: 16px; }
 
   /* מצב כהה */
   body.dark { background: #111; }
@@ -101,6 +108,8 @@
   body.dark #appSettingsModal { background: #222; color: #eee; }
   body.dark #appSettingsModal h3 { border-color: #333; color: #aaa; }
   body.dark .contact-name-row input { background: #333; color: #eee; border-color: #444; }
+  body.dark #versionRow { color: #aaa; }
+  body.dark .secondary { background: #333; color: #eee; }
 </style>
 </head>
 <body>
@@ -172,6 +181,13 @@
 
       <h3>שמות אנשי קשר</h3>
       <div id="contactNamesList"></div>
+
+      <h3>גרסה ועדכונים</h3>
+      <div id="versionRow">
+        <span id="versionText">גרסה: טוען...</span>
+        <button id="checkUpdateBtn" class="secondary">🔄 בדוק עדכון</button>
+      </div>
+      <div id="updateStatus"></div>
 
       <div style="display:flex; gap:8px; margin-top:16px;">
         <button id="saveAppSettings">שמור וסגור</button>

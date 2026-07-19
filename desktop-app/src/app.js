@@ -1,11 +1,12 @@
-let settings = { scriptUrl: '', apiKey: '', defaultPrefix: '972', contactNames: {}, prefs: { readReceipts: true, sound: true, dark: false } };
+let settings = { scriptUrl: '', apiKey: '', defaultPrefix: '972', contactNames: {}, hiddenContacts: [], prefs: { readReceipts: true, sound: true, dark: false } };
 let currentNumber = null;
 let pollTimer = null;
 
 async function init() {
   settings = await window.waSettings.get();
-  // תאימות לאחור - משתמשים ותיקים שנשמרו לפני שהתווספו contactNames/prefs
+  // תאימות לאחור - משתמשים ותיקים שנשמרו לפני שהתווספו contactNames/prefs/hiddenContacts
   settings.contactNames = settings.contactNames || {};
+  settings.hiddenContacts = settings.hiddenContacts || [];
   settings.prefs = { readReceipts: true, sound: true, dark: false, ...(settings.prefs || {}) };
   applyDarkMode();
   if (settings.scriptUrl && settings.apiKey) {
@@ -13,6 +14,42 @@ async function init() {
     document.getElementById('apiKey').value = settings.apiKey;
     document.getElementById('defaultPrefix').value = settings.defaultPrefix || '972';
     showApp();
+    syncSettingsFromServer(); // מנסה למשוך גרסה מסונכרנת מהשרת (Redis) - לא חוסם את הטעינה
+  }
+  loadVersionInfo();
+}
+
+// מושך את ההגדרות שנשמרו ב-Redis (אם שרת מוגדר לזה) ומאחד עם המקומיות -
+// כדי שאם מתקינים על מחשב אחר, שמות אנשי הקשר וההעדפות "יזכרו"
+async function syncSettingsFromServer() {
+  try {
+    const result = await callApi({ action: 'getSettings' });
+    if (result.ok && result.settings) {
+      settings.contactNames = { ...settings.contactNames, ...(result.settings.contactNames || {}) };
+      settings.hiddenContacts = result.settings.hiddenContacts || settings.hiddenContacts;
+      settings.prefs = { ...settings.prefs, ...(result.settings.prefs || {}) };
+      applyDarkMode();
+      await window.waSettings.set(settings);
+      await loadConversations();
+    }
+  } catch {
+    // שקט - אם השרת/Redis לא זמינים, פשוט ממשיכים עם ההגדרות המקומיות
+  }
+}
+
+// שולח את ההגדרות (שמות/העדפות/מוסתרים - לא scriptUrl/apiKey) לשמירה ב-Redis
+async function pushSettingsToServer() {
+  try {
+    await callApiPost({
+      action: 'saveSettings',
+      settings: {
+        contactNames: settings.contactNames,
+        hiddenContacts: settings.hiddenContacts,
+        prefs: settings.prefs,
+      },
+    });
+  } catch {
+    // שקט - הסנכרון לשרת הוא בונוס, לא קריטי לתפקוד השוטף
   }
 }
 
@@ -100,7 +137,8 @@ let conversationsInitialized = false;
 
 async function loadConversations() {
   const data = await callApi({ action: 'conversations' });
-  const list = data.conversations || [];
+  let list = data.conversations || [];
+  list = list.filter((c) => !settings.hiddenContacts.includes(c.number)); // מסננים מי שהוסר
   list.sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
 
   const box = document.getElementById('contactList');
@@ -117,6 +155,7 @@ async function loadConversations() {
         <div class="cnum">${displayName ? escapeHtml(displayName) : c.number}</div>
         <div class="clast">${(c.lastMessage || '').slice(0, 30)}</div>
       </div>
+      <button class="contact-delete" data-number="${c.number}" title="הסתר איש קשר זה מהרשימה">✕</button>
     </div>`;
   }).join('');
 
@@ -136,6 +175,18 @@ async function loadConversations() {
 
   box.querySelectorAll('.contact').forEach((el) => {
     el.addEventListener('click', () => selectConversation(el.dataset.number));
+  });
+  box.querySelectorAll('.contact-delete').forEach((el) => {
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation(); // לא לפתוח את השיחה, רק למחוק
+      const number = el.dataset.number;
+      if (!confirm('להסתיר את איש הקשר הזה מהרשימה? (אפשר להחזיר בהמשך מהגדרות אפליקציה)')) return;
+      settings.hiddenContacts.push(number);
+      await window.waSettings.set(settings);
+      pushSettingsToServer();
+      if (currentNumber === number) currentNumber = null;
+      await loadConversations();
+    });
   });
 }
 
@@ -366,6 +417,47 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// ---------- גרסה ועדכונים ----------
+async function loadVersionInfo() {
+  try {
+    const version = await window.waApp.getVersion();
+    document.getElementById('versionText').textContent = `גרסה: ${version}`;
+  } catch {
+    document.getElementById('versionText').textContent = 'גרסה: לא ידועה';
+  }
+}
+
+document.getElementById('checkUpdateBtn').addEventListener('click', async () => {
+  const status = document.getElementById('updateStatus');
+  status.textContent = '🔄 בודק...';
+  try {
+    const result = await window.waApp.checkForUpdate();
+    if (result.ok && result.version) {
+      status.textContent = `נמצאה גרסה ${result.version} - מורדת ברקע, תתקין אוטומטית כשמוכן`;
+    } else if (result.ok) {
+      status.textContent = '✅ יש לך את הגרסה העדכנית ביותר';
+    } else {
+      status.textContent = '⚠️ בדיקת עדכון נכשלה: ' + (result.error || '');
+    }
+  } catch (err) {
+    status.textContent = '⚠️ בדיקת עדכון נכשלה: ' + err.message;
+  }
+});
+
+// עדכונים שמתגלים ברקע (בדיקה אוטומטית, או מתפריט הטריי) - מציגים למשתמש
+window.waApp.onUpdateAvailable((version) => {
+  document.getElementById('updateStatus').textContent = `נמצאה גרסה חדשה (${version}) - מורדת ברקע...`;
+});
+window.waApp.onUpdateDownloaded((version) => {
+  document.getElementById('updateStatus').textContent = `✅ גרסה ${version} מוכנה - תופעל בהפעלה הבאה של האפליקציה`;
+});
+window.waApp.onUpdateChecked((version) => {
+  if (version) document.getElementById('updateStatus').textContent = `נמצאה גרסה ${version}`;
+});
+window.waApp.onUpdateError((message) => {
+  document.getElementById('updateStatus').textContent = '⚠️ ' + message;
+});
+
 // ---------- מצב כהה ----------
 function applyDarkMode() {
   document.body.classList.toggle('dark', !!settings.prefs.dark);
@@ -400,16 +492,35 @@ function renderContactNamesList() {
   const container = document.getElementById('contactNamesList');
   const knownNumbers = Array.from(document.querySelectorAll('#contactList .contact')).map((el) => el.dataset.number);
   const allNumbers = Array.from(new Set([...knownNumbers, ...Object.keys(settings.contactNames)]));
+  let html = '';
   if (!allNumbers.length) {
-    container.innerHTML = '<div style="font-size:12px;color:#999;">אין עדיין אנשי קשר - יופיעו כאן אחרי שיחה ראשונה</div>';
-    return;
+    html += '<div style="font-size:12px;color:#999;">אין עדיין אנשי קשר - יופיעו כאן אחרי שיחה ראשונה</div>';
+  } else {
+    html += allNumbers.map((num) => `
+      <div class="contact-name-row">
+        <span class="cnr-number">${num}</span>
+        <input type="text" data-number="${num}" placeholder="שם (לא חובה)" value="${escapeHtml(settings.contactNames[num] || '')}" />
+      </div>
+    `).join('');
   }
-  container.innerHTML = allNumbers.map((num) => `
-    <div class="contact-name-row">
-      <span class="cnr-number">${num}</span>
-      <input type="text" data-number="${num}" placeholder="שם (לא חובה)" value="${escapeHtml(settings.contactNames[num] || '')}" />
-    </div>
-  `).join('');
+  // אנשי קשר שהוסתרו - עם אפשרות להחזיר
+  if (settings.hiddenContacts.length) {
+    html += '<div style="font-size:11px;color:#999;margin-top:10px;">מוסתרים:</div>';
+    html += settings.hiddenContacts.map((num) => `
+      <div class="contact-name-row">
+        <span class="cnr-number">${settings.contactNames[num] || num}</span>
+        <button type="button" class="restore-contact secondary" data-number="${num}" style="flex:none;font-size:11px;padding:6px 10px;">↩️ החזר</button>
+      </div>
+    `).join('');
+  }
+  container.innerHTML = html;
+
+  container.querySelectorAll('.restore-contact').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      settings.hiddenContacts = settings.hiddenContacts.filter((n) => n !== btn.dataset.number);
+      renderContactNamesList();
+    });
+  });
 }
 
 document.getElementById('saveAppSettings').addEventListener('click', async () => {
@@ -425,6 +536,7 @@ document.getElementById('saveAppSettings').addEventListener('click', async () =>
   settings.contactNames = newNames;
 
   await window.waSettings.set(settings);
+  pushSettingsToServer();
   applyDarkMode();
   document.getElementById('appSettingsOverlay').classList.remove('open');
   await loadConversations();

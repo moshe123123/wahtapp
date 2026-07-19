@@ -18,6 +18,9 @@
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
   },
+  "dependencies": {
+    "electron-updater": "^6.3.4"
+  },
   "build": {
     "appId": "com.moshe123123.wathapp",
     "productName": "WA Bridge",
@@ -29,7 +32,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -38,6 +42,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "assets/**/*",
       "src/**/*"
     ]
   }

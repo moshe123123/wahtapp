@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate, sendTestConversationStarter } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { sendOpeningRequestSms } from './smsClient.js';
+import { getSettings, saveSettings } from './settingsStore.js';
 import { logger } from './logger.js';
 import axios from 'axios';
 
@@ -469,6 +470,24 @@ app.post('/coexistence/exchange', async (req, res) => {
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// ---------- סנכרון הגדרות (שמות אנשי קשר, העדפות) דרך Redis ----------
+// כדי שההגדרות ישמרו גם אם מתקינים על מחשב אחר / מתקינים מחדש
+app.get('/settings', requireApiKey, async (req, res) => {
+  const settings = await getSettings();
+  if (settings === null) {
+    return res.status(503).json({ error: 'שירות הסנכרון לא זמין (REDIS_URL לא מוגדר)' });
+  }
+  res.json({ ok: true, settings });
+});
+
+app.post('/settings', requireApiKey, async (req, res) => {
+  const ok = await saveSettings(req.body || {});
+  if (!ok) {
+    return res.status(503).json({ error: 'שמירת ההגדרות נכשלה (בדוק REDIS_URL)' });
+  }
+  res.json({ ok: true });
+});
 
 // תפיסת שגיאות גלובליות שלא נתפסו בקוד - כדי שגם הן יופיעו בלוג ולא "ייעלמו" בשקט
 process.on('unhandledRejection', (reason) => {
