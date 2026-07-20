@@ -72,6 +72,23 @@ export async function sendTestConversationStarter({ toNumber, templateName = 'he
   }
 }
 
+/**
+ * מנויה (subscribe) את חשבון ה-WABA הנתון ל-webhook של האפליקציה, כדי
+ * שהודעות שמגיעות אליו (למשל תגובות למספר הבדיקה) יתחילו להישלח אלינו.
+ * זו פעולה בטוחה לחזור עליה שוב ושוב (idempotent) - לכן מריצים אותה
+ * אוטומטית בכל עליית שרת, במקום לדרוש הרצה ידנית חד-פעמית ממישהו.
+ */
+export async function ensureWabaSubscribed(wabaId, accessToken) {
+  if (!wabaId || !accessToken) return;
+  try {
+    const client = graphClient(accessToken);
+    const { data } = await client.post(`/${wabaId}/subscribed_apps`);
+    logger.info('חשבון WABA נרשם ל-webhook בהצלחה', { wabaId, data });
+  } catch (err) {
+    logger.error('הרשמת WABA ל-webhook נכשלה', { wabaId, error: err.response?.data || err.message });
+  }
+}
+
 /** רישום המספר בפועל מול Cloud API (שלב טכני נדרש, נפרד מ-request_code/verify_code) */
 export async function registerPhoneNumber({ pin = '123456' } = {}) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate, sendTestConversationStarter } from './whatsappClient.js';
+import { requestVerificationCode, verifyCode, sendWhatsAppText, registerPhoneNumber, markMessageAsRead, getMediaAsBase64, uploadMedia, sendWhatsAppMedia, sendWhatsAppTemplate, sendTestConversationStarter, ensureWabaSubscribed } from './whatsappClient.js';
 import { forwardWhatsAppMessageToEmail } from './mailer.js';
 import { sendOpeningRequestSms } from './smsClient.js';
 import { getSettings, saveSettings } from './settingsStore.js';
@@ -500,4 +500,11 @@ process.on('uncaughtException', (err) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`שרת Cloud API רץ על פורט ${PORT}`);
+
+  // רישום אוטומטי של חשבון הבדיקה ל-webhook - כדי שתגובות למספר הבדיקה
+  // (יזום שיחה חינמי) יגיעו אלינו, בלי שמישהו יצטרך להריץ פקודה ידנית.
+  // בטוח להריץ בכל עליית שרת - זה idempotent (אין נזק מהרשמה חוזרת).
+  if (process.env.WHATSAPP_TEST_WABA_ID && process.env.WHATSAPP_TEST_ACCESS_TOKEN) {
+    ensureWabaSubscribed(process.env.WHATSAPP_TEST_WABA_ID, process.env.WHATSAPP_TEST_ACCESS_TOKEN);
+  }
 });
