@@ -423,7 +423,7 @@ app.post('/family-notify', (req, res) => {
   // מבנה ה-JSON משתנה קצת בין אפליקציות forwarder שונות - מנסים כמה שמות שדה נפוצים
   const body = req.body || {};
   const appName = body.app || body.packageName || body.package || '';
-  const title = body.title || body.sender || '';
+  const title = body.title || body.sender || 'קבוצה משפחתית';
   const text = body.text || body.message || body.content || body.bigText || '';
 
   // מסננים החוצה התראות שהן לא מוואטסאפ, אם השדה קיים
@@ -431,10 +431,12 @@ app.post('/family-notify', (req, res) => {
     return res.json({ ok: true, skipped: true });
   }
 
-  const combinedText = title ? `${title}: ${text}` : text;
+  // כל קבוצה/שיחה מקבלת "שיחה" נפרדת בממשק, לפי שם ההתראה (בד"כ שם הקבוצה) -
+  // כדי שקבוצות שונות לא יתערבבו לשיחה אחת משותפת
+  const groupKey = 'group:' + title;
   logger.info('התקבלה התראת קבוצה משפחתית', { title, text });
-  addMessageToConversation('family-group', 'in', combinedText || '(התראה ללא טקסט)', null);
-  forwardWhatsAppMessageToEmail({ fromNumber: 'family-group', fromName: 'קבוצה משפחתית', text: combinedText }).catch(() => {});
+  addMessageToConversation(groupKey, 'in', text || '(התראה ללא טקסט)', null);
+  forwardWhatsAppMessageToEmail({ fromNumber: groupKey, fromName: title, text }).catch(() => {});
   res.json({ ok: true });
 });
 
