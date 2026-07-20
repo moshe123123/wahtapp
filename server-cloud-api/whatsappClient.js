@@ -49,19 +49,23 @@ export async function sendWhatsAppTemplate({ toNumber, templateName, languageCod
  * דרך developers.facebook.com, לא משהו שהקוד הזה עושה.
  * ההודעות יגיעו מהמספר האמריקאי של הבדיקה, לא מהמספר העסקי הרגיל.
  */
-export async function sendTestConversationStarter({ toNumber, templateName = 'hello_world', languageCode = 'en_US' }) {
+export async function sendTestConversationStarter({ toNumber, templateName, languageCode }) {
+  // אם לא צוין שם תבנית מפורש, לוקחים מהגדרות השרת (WHATSAPP_TEST_TEMPLATE_NAME) -
+  // כדי שאפשר יהיה לעבור לתבנית מותאמת אישית בלי לשנות קוד, רק env var.
+  const finalTemplateName = templateName || process.env.WHATSAPP_TEST_TEMPLATE_NAME || 'hello_world';
+  const finalLanguageCode = languageCode || process.env.WHATSAPP_TEST_TEMPLATE_LANG || 'en_US';
   const phoneNumberId = process.env.WHATSAPP_TEST_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_TEST_ACCESS_TOKEN; // אם לא מוגדר, ייפול חזרה לטוקן הרגיל
   const client = graphClient(accessToken);
-  logger.info('שולח יזום שיחה חינמי דרך מספר הבדיקה', { toNumber, phoneNumberId });
+  logger.info('שולח יזום שיחה חינמי דרך מספר הבדיקה', { toNumber, phoneNumberId, template: finalTemplateName });
   try {
     const { data } = await client.post(`/${phoneNumberId}/messages`, {
       messaging_product: 'whatsapp',
       to: toNumber,
       type: 'template',
       template: {
-        name: templateName,
-        language: { code: languageCode },
+        name: finalTemplateName,
+        language: { code: finalLanguageCode },
       },
     });
     logger.info('הודעת בדיקה נשלחה בהצלחה', data);
