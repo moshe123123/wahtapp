@@ -60,6 +60,44 @@ async function postFollowingRedirect(url, payload, maxHops = 5) {
 // זה מה שמאפשר ממשק התכתבות באזור האישי, בלי קשר לתוסף הכרום/Gmail
 const conversations = new Map();
 
+// אחסון זמני (בזיכרון בלבד, לא DB) למדיה שמתקבלת דרך /family-media -
+// כלומר תמונות שוואטסאפ שמרה בעצמה בתיקיית המדיה של המכשיר, ו-MacroDroid
+// מעביר אותן לכאן דרך HTTP Request מסוג File. מפתח: מזהה מקומי (לא של Meta).
+// נשמר עד 200 פריטים אחרונים כדי לא לנפח את הזיכרון.
+const localMediaStore = new Map();
+function storeLocalMedia(buffer, mimeType) {
+  const id = 'local:' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  localMediaStore.set(id, { base64: buffer.toString('base64'), mimeType, createdAt: Date.now() });
+  if (localMediaStore.size > 200) {
+    const oldestKey = localMediaStore.keys().next().value;
+    localMediaStore.delete(oldestKey);
+  }
+  return id;
+}
+
+// רשימת אירועי /family-notify אחרונים (groupKey + זמן) - לשימוש ב-/family-media
+// כדי "לנחש" מאיזו קבוצה הגיעה תמונה שמגיעה בלי שום מידע על השולח (רק בייטים
+// גולמיים). ההנחה: תמונה שמגיעה בסמוך לזמן (עד 45 שניות) אחרי הודעת טקסט
+// מקבוצה מסוימת - כנראה שייכת לאותה קבוצה. זו היוריסטיקה, לא זיהוי מדויק.
+const recentFamilyEvents = [];
+function recordFamilyEvent(groupKey) {
+  recentFamilyEvents.push({ groupKey, ts: Date.now() });
+  const cutoff = Date.now() - 5 * 60 * 1000; // שומרים רק 5 דקות אחורה
+  while (recentFamilyEvents.length && recentFamilyEvents[0].ts < cutoff) recentFamilyEvents.shift();
+}
+function guessGroupKeyForMedia() {
+  const CORRELATION_WINDOW_MS = 45 * 1000;
+  const now = Date.now();
+  // מחפשים את האירוע הכי קרוב בזמן (לא בהכרח האחרון ברשימה) בתוך החלון
+  let best = null;
+  for (const ev of recentFamilyEvents) {
+    if (now - ev.ts <= CORRELATION_WINDOW_MS) {
+      if (!best || Math.abs(now - ev.ts) < Math.abs(now - best.ts)) best = ev;
+    }
+  }
+  return best ? best.groupKey : 'group:תמונה לא מזוהה';
+}
+
 function addMessageToConversation(number, direction, text, id, extra = {}) {
   if (!conversations.has(number)) conversations.set(number, []);
   const list = conversations.get(number);
@@ -388,6 +426,13 @@ app.post('/send-media', requireApiKey, async (req, res) => {
 // להציג/להשמיע בפועל, כדי לא להעמיס את טעינת השיחה הראשונית בקבצים כבדים
 app.get('/media/:mediaId', requireApiKey, async (req, res) => {
   try {
+    // מדיה "מקומית" (התקבלה דרך /family-media, לא דרך WhatsApp Cloud API הרשמי) -
+    // מוגשת ישירות מהזיכרון, בלי לפנות ל-Graph API של מטא בכלל.
+    if (req.params.mediaId.startsWith('local:')) {
+      const stored = localMediaStore.get(req.params.mediaId);
+      if (!stored) return res.status(404).json({ error: 'local media not found (maybe expired)' });
+      return res.json({ ok: true, base64: stored.base64, mimeType: stored.mimeType });
+    }
     const result = await getMediaAsBase64(req.params.mediaId);
     res.json({ ok: true, ...result });
   } catch (err) {
@@ -435,10 +480,39 @@ app.post('/family-notify', (req, res) => {
   // כדי שקבוצות שונות לא יתערבבו לשיחה אחת משותפת
   const groupKey = 'group:' + title;
   logger.info('התקבלה התראת קבוצה משפחתית', { title, text });
+  recordFamilyEvent(groupKey);
   addMessageToConversation(groupKey, 'in', text || '(התראה ללא טקסט)', null);
   forwardWhatsAppMessageToEmail({ fromNumber: groupKey, fromName: title, text }).catch(() => {});
   res.json({ ok: true });
 });
+
+// ---------- קליטת תמונות מקבוצות משפחתיות (MacroDroid "File Changed" trigger) ----------
+// וואטסאפ שומרת תמונות נכנסות אוטומטית ל-WhatsApp/Media/WhatsApp Images במכשיר.
+// MacroDroid מאזין לתיקייה הזו (Trigger: File Changed) ושולח כל קובץ חדש כ-HTTP
+// POST גולמי (בייטים, לא JSON) לכתובת הזו. אין כאן שום מידע על שם הקבוצה/השולח -
+// רק תוכן הקובץ - לכן אנחנו "מנחשים" את הקבוצה לפי התאמת זמנים מול הודעות טקסט
+// אחרונות שהתקבלו מ-/family-notify (ראו guessGroupKeyForMedia למעלה).
+// שימו לב: זה עדיין לא נוגע בפרוטוקול וואטסאפ בשום צורה - קורא רק קובץ מקומי
+// שוואטסאפ עצמה כבר שמרה בדיסק. אפס סיכון לחסימת חשבון.
+app.post(
+  '/family-media',
+  express.raw({ type: () => true, limit: '10mb' }), // מקבל בייטים גולמיים מכל Content-Type
+  (req, res) => {
+    const key = req.query.key;
+    if (!process.env.FAMILY_WEBHOOK_KEY || key !== process.env.FAMILY_WEBHOOK_KEY) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'empty or invalid body - expected raw image bytes' });
+    }
+    const mimeType = req.headers['content-type'] || 'image/jpeg';
+    const mediaId = storeLocalMedia(req.body, mimeType);
+    const groupKey = guessGroupKeyForMedia();
+    logger.info('התקבלה תמונת קבוצה משפחתית', { groupKey, mimeType, sizeBytes: req.body.length, mediaId });
+    addMessageToConversation(groupKey, 'in', '', null, { type: 'image', mediaId, mimeType });
+    res.json({ ok: true, mediaId, matchedGroup: groupKey });
+  }
+);
 
 // endpoint חד-פעמי: מקבל את ה-code שהתקבל מתהליך ה-Embedded Signup (Coexistence)
 // ומחליף אותו בטוקן דרך Graph API, כדי לראות אילו נכסים (WABA/מספר) התקבלו בפועל
